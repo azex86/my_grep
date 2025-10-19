@@ -159,10 +159,20 @@ Tree* operator_unaire_slice(Tree** er,size_t er_size,int operator_priority)
 
         if(er[index]->etiquette==operator && is_racine(er[index]))
         {
-            er[index]->left_chilfren = char_slice(er,index);
-            er[index]->right_children = NULL;
+            Tree* next = operator_unaire_slice(&er[index+1],er_size-index-1,operator_priority);
+            Tree* t = NULL;
+#error "problème"
+            if(next!=NULL)
+            {
+                er[index]->left_chilfren = char_slice(er,index);
+                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,er[index],next);
+            }else
+            {
+                er[index]->left_chilfren = char_slice(er,index);
+                t = er[index];
+            }
 
-            Tree* t = er[index];
+
             er[index] = NULL;
             return t;
         }
@@ -569,7 +579,7 @@ void Automate_print(Automate* a)
     printf("Etats finaux : ");ListArray_print(a->finaux);
     for (size_t i = 0; i < a->nb_etat; i++)
     {
-        printf("Depuise le sommet %ld : [",i);
+        printf("Depuis le sommet %ld : [",i);
         for(size_t lettre =0;lettre<ALPHABET_SIZE;lettre++)
             for(size_t j=0;j<a->transitions[i][lettre]->size;j++)
                 printf("(%c,%ld);",(char)lettre,a->transitions[i][lettre]->data[j]);
@@ -627,6 +637,7 @@ void Automate_add_transition(Automate* a,size_t source,size_t lettre,size_t dest
 
 /// @brief instancie une version normalisée d'un automate avec un seul état initial et un seul état final
 /// @param a 
+/// @warning pas encore implémenté
 /// @return 
 Automate* Automate_normalisation(Automate* a)
 {
@@ -720,8 +731,8 @@ Automate* Automate_concatenation(Automate* a1,Automate* a2)
         Sommet source = a1->finaux->data[i];
         for(size_t j=0;j<a2->initiaux->size;j++)
         {
-            Sommet dest = a2->finaux->data[j];
-            Automate_add_transition(b,source,EPSILON_TRANSITION_INDEX,dest);
+            Sommet dest = a2->initiaux->data[j];
+            Automate_add_transition(b,source,EPSILON_TRANSITION_INDEX,dest+delta);
         }
     }
 
@@ -741,6 +752,9 @@ Automate* Automate_etoile(Automate* a)
     // on ajoute un état qui sera l'unique état initial et final (on va le noter q)
     // on relie tous les états initiaux de a depuis cet état
     // on relie tous les états finaux de a vers cet état
+
+    printf("automate etoile : entrée : ");
+    Automate_print(a);
 
     Automate* b = Automate_init(a->nb_etat+1);
     Sommet q = a->nb_etat;
@@ -767,7 +781,8 @@ Automate* Automate_etoile(Automate* a)
     {
         Automate_add_transition(b,a->finaux->data[i],EPSILON_TRANSITION_INDEX,q);
     }
-
+    printf("sortie : ");
+    Automate_print(b);
     return b;
 }
 
@@ -779,9 +794,12 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
     Automate* a = NULL;
     Automate* b = NULL;
     Automate* c = NULL;
-
+    printf("lecture de l'abre syntaxique : "); 
+    Tree_print(syntaxique_tree);
+    printf("\n");
     switch (syntaxique_tree->etiquette)
     {
+        
         case SYNTAXE_OPERATOR_CONCATENATION:
             a = make_thomson_automate(syntaxique_tree->left_chilfren);
             b = make_thomson_automate(syntaxique_tree->right_children);
@@ -848,6 +866,218 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
 }
 
 
+/// @brief Implémentation des ensembles finies
+/// Interface : initialisation O(n); libération; ajout O(n);
+/// test d'appartenance O(1); fusion O(n)
+struct Ensemble
+{
+    bool* data;
+    size_t size;
+};
+typedef struct Ensemble Ensemble;
+
+/// @brief Instancie un ensemble dont le nombre d'élément ne dépassera pas `n`
+/// l'ensemble est initialement vide
+/// @param n 
+/// @return un pointeur vers un ensemble
+Ensemble* Ensemble_init(size_t n)
+{   
+    Ensemble* e = malloc(sizeof(Ensemble));
+    e->size = n;
+    e->data = malloc(sizeof(bool)*n);
+    for(size_t i=0;i<n;i++)
+        e->data[i]=false;
+    return e;
+}
+
+void Ensemble_free(Ensemble* e)
+{
+    free(e->data);
+    free(e);
+}
+
+void Ensemble_print(Ensemble* e)
+{
+    printf("{");
+    for(size_t i=0;i<e->size;i++)
+        if(e->data[i])
+            printf("%ld;",i);
+    printf("}\n");
+}
+
+/// @brief Ajoute un élément à un ensemble
+/// @param e 
+/// @param s 
+void Ensemble_add(Ensemble* e,Sommet s)
+{
+    e->data[s] = true;
+}
+
+/// @brief teste si un élément est dans un ensemble
+/// @param e 
+/// @param s 
+/// @return true si `s` est dans `e`
+bool Ensemble_mem(Ensemble* e,Sommet s)
+{
+    return e->data[s];
+}
+
+/// @brief Instancie une copie d'un ensemble
+/// @param e 
+/// @return 
+Ensemble* Ensemble_copy(Ensemble* e)
+{
+    Ensemble* new_e = Ensemble_init(e->size);
+    memcpy(new_e->data,e->data,e->size*sizeof(bool));
+    return new_e;
+}
+
+/// @brief Instancie un nouvel enemble contenant tous les éléments de a et de b
+/// @param a 
+/// @param b 
+/// @return 
+Ensemble* Ensemble_merge(Ensemble* a,Ensemble* b)
+{
+    Ensemble* c = Ensemble_init(a->size);
+    for(size_t i=0;i<c->size;i++)
+    {
+        c->data[i] = (Ensemble_mem(a,i))||(Ensemble_mem(b,i));
+    }
+    return c;
+}
+
+/// @brief insère tous les éléments d'une liste dans un ensemble
+/// @param e 
+/// @param list 
+void Ensemble_eat_list(Ensemble* e,ListArray* list)
+{
+    for(size_t i=0;i<list->size;i++)
+        Ensemble_add(e,list->data[i]);
+}
+
+void _rec_cloture_etat_depth_search(Automate* a,Sommet q,Ensemble* vus)
+{
+    if(Ensemble_mem(vus,q))
+    {
+        return;
+    }else
+    {
+        Ensemble_add(vus,q);
+        for(size_t i=0;i<a->transitions[q][EPSILON_TRANSITION_INDEX]->size;i++)
+            _rec_cloture_etat_depth_search(a,a->transitions[q][EPSILON_TRANSITION_INDEX]->data[i],vus);
+    }
+}
+
+/// @brief retoune la cloture instantanée d'un état dans un automate à epsilon transition
+/// @param a 
+/// @param q 
+/// @return 
+Ensemble* Automate_cloture_instantanee_etat(Automate* a,Sommet q)
+{
+    Ensemble* cloture = Ensemble_init(a->nb_etat);
+    _rec_cloture_etat_depth_search(a,q,cloture);
+    return cloture;
+}
+
+/// @brief Calcule l'union des clotures instantannées des états de `e`
+/// @param a 
+/// @param e 
+/// @return 
+Ensemble* Automate_cloture_instantanee(Automate* a,Ensemble* e)
+{
+    Ensemble* Q = Ensemble_copy(e);
+    for(size_t i=0;i<a->nb_etat;i++)
+    {
+        if(Ensemble_mem(e,i))
+        {
+            for(size_t j=0;j<a->transitions[i][EPSILON_TRANSITION_INDEX]->size;j++)
+            {
+                _rec_cloture_etat_depth_search(a,a->transitions[i][EPSILON_TRANSITION_INDEX]->data[j],Q);
+            }
+        }
+    }
+
+    return Q;
+}
+
+
+
+/// @brief retourne l'ensemble des états accessibles dans l'automate `a`
+/// depuis les états de `e` en lisant la lettre l
+/// @warning les epsilon transition ne sont pas considérées
+/// @param a 
+/// @param e 
+/// @param l 
+/// @return 
+Ensemble* Automate_read_letter(Automate* a,Ensemble* e,size_t l)
+{
+    Ensemble* dest = Ensemble_init(a->nb_etat);
+    
+    for (size_t i = 0; i < a->nb_etat; i++)
+    {
+        if(Ensemble_mem(e,i))
+        {
+            Ensemble_eat_list(dest,a->transitions[i][l]);
+        }
+    }
+    
+    return dest;
+}
+
+/// @brief détermine si il y a un état final dans un ensemble
+/// @param a 
+/// @param e 
+/// @return 
+bool Automate_is_final_ensemble(Automate* a,Ensemble* e)
+{
+    for(size_t i=0;i<a->finaux->size;i++)
+    {
+        if(Ensemble_mem(e,a->finaux->data[i]))
+            return true;
+    }
+    return false;
+}
+
+/// @brief détermine si un mot est reconnu par un automate
+/// @param a 
+/// @param e 
+/// @param word 
+/// @return 
+bool Automate_read_word(Automate* a,char* word)
+{
+    // on initialise un ensemble avec les états initiaux et les états dans la cloture instantanée des états initiaux
+    Ensemble* initiaux = Ensemble_init(a->nb_etat);
+    Ensemble_eat_list(initiaux,a->initiaux);
+    Ensemble* temp = Automate_cloture_instantanee(a,initiaux);
+    Ensemble_free(initiaux);
+    initiaux = temp;
+
+    printf("début de la lecture du mot %s, états de départ : ",word);
+    Ensemble_print(initiaux);
+
+    // on lit ensuite chaque lettre de manière itérative
+    // sans oublie de calculer la cloture instantanée à chaque fois
+    for(size_t index=0;word[index]!='\0';index++)
+    {
+        temp = Automate_read_letter(a,initiaux,word[index]);
+        printf("Après lecture de la lettre '%c'\n",word[index]);
+        Ensemble_print(temp);
+
+        Ensemble_free(initiaux);
+        initiaux = Automate_cloture_instantanee(a,temp);
+        Ensemble_free(temp);
+        printf("Après cloture instantanée\n");
+        Ensemble_print(initiaux);
+    }
+
+    // on regarde si il y a un état final dans les états obtenus
+    bool is_final = Automate_is_final_ensemble(a,initiaux);
+    Ensemble_free(initiaux);
+
+    return is_final;
+}
+
+
 enum SOURCE
 { 
     SOURCE_FILE,
@@ -874,9 +1104,11 @@ int main(int argc,char** argv)
         }
     }
 
-    char* reg = "(a)*";//"(a|b)*ab(a|b)*";
-    if(regular_expression==NULL)
-        regular_expression = reg;
+
+
+    //char* reg = "aa";//"(a|b)*ab(a|b)*";
+    //if(regular_expression==NULL)
+    //    regular_expression = reg;
 
     printf("Recherche du motif \'%s\' dans ",regular_expression);
     if(source==SOURCE_FILE)
@@ -896,7 +1128,14 @@ int main(int argc,char** argv)
         printf("Impossible de construire l'automate associé à l'expression %s !\n",regular_expression);
     Automate_print(a);
 
-
+    if(source == SOURCE_FILE)
+    {
+        bool reconaissance = Automate_read_word(a,input_filename);
+        if(reconaissance)
+            printf("Le mot \"%s\" est reconnu par l'expression rationnelle \"%s\" !\n",input_filename,regular_expression);
+        else
+            printf("Le mot \"%s\" n'est pas reconnu par l'expression \"%s\" !\n",input_filename,regular_expression);
+    }
     if(a!=NULL)Automate_free(a);
     if(t!=NULL)Tree_free(t);
 

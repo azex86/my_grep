@@ -3,8 +3,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-typedef size_t Sommet;
+#define max(a,b) ((a>b)?a:b)
+#define min(a,b) ((a>b)?b:a)
 
+typedef size_t Sommet;
+typedef size_t Lettre;
 
 /*
     Première Partie
@@ -150,6 +153,8 @@ Tree* operator_unaire_slice(Tree** er,size_t er_size,int operator_priority)
         
     // printf("\n");
 
+    Tree* last_tree = NULL;
+    size_t last_tree_index = 0;
 
     size_t index=0;
     for(;index<er_size;index++)
@@ -159,22 +164,42 @@ Tree* operator_unaire_slice(Tree** er,size_t er_size,int operator_priority)
 
         if(er[index]->etiquette==operator && is_racine(er[index]))
         {
-            Tree* next = operator_unaire_slice(&er[index+1],er_size-index-1,operator_priority);
-            Tree* t = NULL;
-#error "problème"
-            if(next!=NULL)
+            // on a trouvé un opérateur
+            // on lui passe comme argument la dernière expression rencontrée : current_tree
+            // puis on concatène avec l'arbre de l'expression antérieur 
+            // puis on concatène avec l'arbre de la suite
+            
+            if(last_tree==NULL)
             {
-                er[index]->left_chilfren = char_slice(er,index);
-                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,er[index],next);
-            }else
-            {
-                er[index]->left_chilfren = char_slice(er,index);
-                t = er[index];
+                fprintf(stderr,"Impossible de raccrocher l'opérateur * à une expression !\n");
+                return NULL;
             }
 
+            Tree* antecedent = char_slice(er,last_tree_index);
+            
+            Tree* next = operator_unaire_slice(&er[index+1],er_size-index-1,operator_priority);
+            
+            Tree* t;
+            t = er[index];
+            t->left_chilfren = last_tree; // gestion de l'arbre de l'opérateur
+
+            if(antecedent!=NULL)
+            {
+                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,antecedent,t); // concaténation avec l'antécédent
+            }
+
+            if(next!=NULL)
+            {
+                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,t,next); //concaténation avec le suivant
+            }
 
             er[index] = NULL;
+            er[last_tree_index] = NULL;
             return t;
+        }else
+        {
+            last_tree = er[index];
+            last_tree_index = index;
         }
     }
 
@@ -521,7 +546,7 @@ void ListArray_extend(ListArray* dest,ListArray* source)
         ListArray_push(dest,source->data[i]);
 }
 
-#define ALPHABET_SIZE (unsigned char)(-1)
+#define ALPHABET_SIZE 1024
 #define EPSILON_TRANSITION_INDEX 0
 struct Automate
 {
@@ -586,6 +611,23 @@ void Automate_print(Automate* a)
         printf("]\n");
     }
     
+}
+
+Automate* Automate_copy(Automate* a)
+{
+    Automate* b = Automate_init(a->nb_etat);
+    ListArray_extend(b->initiaux,a->initiaux);
+    ListArray_extend(b->finaux,a->finaux);
+
+    for(Sommet source=0;source<a->nb_etat;source++)
+    {
+        for(Lettre l=0;l<ALPHABET_SIZE;l++)
+        {
+            ListArray_extend(b->transitions[source][l],a->transitions[source][l]);
+        }
+    }
+
+    return b;
 }
 
 Sommet delta_index_to_reindexationn_fun = 0;
@@ -786,6 +828,34 @@ Automate* Automate_etoile(Automate* a)
     return b;
 }
 
+
+Automate* Automate_joker()
+{
+    // automate reconnaissant tous les mots (même le mot vide)
+    Automate* a = Automate_init(1);
+    Automate_add_etat_initial(a,0);
+    Automate_add_etat_final(a,0);
+    for(size_t l=0;l<ALPHABET_SIZE;l++)
+    {
+        Automate_add_transition(a,0,l,0);
+    }
+    return a;
+}
+
+Automate* Automate_sigma()
+{
+    // automate reconnaissant tous caractère de l'alphabet
+    Automate* a = Automate_init(2);
+    Automate_add_etat_initial(a,0);
+    Automate_add_etat_final(a,1);
+    for(size_t l=0;l<ALPHABET_SIZE;l++)
+    {
+        if(l!=EPSILON_TRANSITION_INDEX) // on ne reconnait pas le mot vide
+            Automate_add_transition(a,0,l,1);
+    }
+    return a;
+}
+
 Automate* make_thomson_automate(Tree* syntaxique_tree)
 {
     if(syntaxique_tree==NULL)
@@ -794,9 +864,9 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
     Automate* a = NULL;
     Automate* b = NULL;
     Automate* c = NULL;
-    printf("lecture de l'abre syntaxique : "); 
-    Tree_print(syntaxique_tree);
-    printf("\n");
+    //printf("lecture de l'abre syntaxique : "); 
+    //Tree_print(syntaxique_tree);
+    //printf("\n");
     switch (syntaxique_tree->etiquette)
     {
         
@@ -851,9 +921,10 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
             return b;    
             break;
         case SYNTAXE_OPERATOR_JOKER:
+            return Automate_joker();
             break;
         case SYNTAXE_OPERATOR_SIGMA:
-
+            return Automate_sigma();
             break;
 
         default:
@@ -946,6 +1017,17 @@ Ensemble* Ensemble_merge(Ensemble* a,Ensemble* b)
     return c;
 }
 
+/// @brief retourne si un ensemble est vide
+/// @param e
+/// @return true si l'ensemble est vide, false sinon
+bool Ensemble_vide(Ensemble* e)
+{
+    for(size_t i=0;i<e->size;i++)
+        if(e->data[i])
+            return false;
+    return true;
+}
+
 /// @brief insère tous les éléments d'une liste dans un ensemble
 /// @param e 
 /// @param list 
@@ -1000,6 +1082,16 @@ Ensemble* Automate_cloture_instantanee(Automate* a,Ensemble* e)
     return Q;
 }
 
+/// @brief même chose que `Automate_cloture_instantanee` mais avec liberation/consommation de `e`
+/// @param a 
+/// @param e 
+/// @return 
+Ensemble* Automate_cloture_instantanee_inplace(Automate* a,Ensemble* e)
+{
+    Ensemble* temp = Automate_cloture_instantanee(a,e);
+    Ensemble_free(e);
+    return temp;
+}
 
 
 /// @brief retourne l'ensemble des états accessibles dans l'automate `a`
@@ -1052,22 +1144,22 @@ bool Automate_read_word(Automate* a,char* word)
     Ensemble_free(initiaux);
     initiaux = temp;
 
-    printf("début de la lecture du mot %s, états de départ : ",word);
-    Ensemble_print(initiaux);
+    //printf("début de la lecture du mot %s, états de départ : ",word);
+    //Ensemble_print(initiaux);
 
     // on lit ensuite chaque lettre de manière itérative
     // sans oublie de calculer la cloture instantanée à chaque fois
     for(size_t index=0;word[index]!='\0';index++)
     {
         temp = Automate_read_letter(a,initiaux,word[index]);
-        printf("Après lecture de la lettre '%c'\n",word[index]);
-        Ensemble_print(temp);
+        //printf("Après lecture de la lettre '%c'\n",word[index]);
+        //Ensemble_print(temp);
 
         Ensemble_free(initiaux);
         initiaux = Automate_cloture_instantanee(a,temp);
         Ensemble_free(temp);
-        printf("Après cloture instantanée\n");
-        Ensemble_print(initiaux);
+        //printf("Après cloture instantanée\n");
+        //Ensemble_print(initiaux);
     }
 
     // on regarde si il y a un état final dans les états obtenus
@@ -1077,18 +1169,224 @@ bool Automate_read_word(Automate* a,char* word)
     return is_final;
 }
 
+/// @brief retourne un automate, inverse le sens de ses transitions et inverse initiaux et finaux
+/// @param a 
+/// @return un nouvel automate
+Automate* Automate_reverse(Automate* a)
+{
+    Automate* b = Automate_init(a->nb_etat);
+    
+    // on inverse initiaux et finaux
+    ListArray_extend(b->initiaux,a->finaux);
+    ListArray_extend(b->finaux,a->initiaux);
 
-enum SOURCE
-{ 
-    SOURCE_FILE,
-    SOURCE_STDIN,
+    // on inverse les transitions
+    for(Sommet source=0;source<a->nb_etat;source++)
+    {
+        for(Lettre l=0;l<ALPHABET_SIZE;l++)
+        {
+            for(size_t i=0;i<a->transitions[source][l]->size;i++)
+            {
+                Sommet dest = a->transitions[source][l]->data[i];
+                Automate_add_transition(b,dest,l,source);
+            }
+        }
+    }
+
+    return b;
+}
+
+
+/// @brief lit une chaîne de caractère et détecte les motifs reconnu par l'automate `a`
+/// et renvoie une liste des index de fin de ces motifs dans la chaîne `line`
+/// @note on privilégiera toujours les motifs les plus petits : 
+/// exemple avec le texte "abab" et l'automate reconnaissant "a(a|b)*b", "abab" est vu comme deux motifs
+/// @warning find("ab*a","aabbbaba") -> aa et aba donc [1;7]
+/// @param a 
+/// @param line 
+/// @return 
+ListArray* find_motif_end_indexs(Automate* a,char* line)
+{
+    // on construit l'automate reconnaissant ".e" avec e l'expression régulière dont le langage est dénoté par a
+    // c'est à dire "(SIGMA)*e" 
+    Automate* b = Automate_joker();
+    a = Automate_concatenation(b,a);
+    Automate_free(b);
+
+    //Automate_print(a);
+
+    Ensemble* Q = Ensemble_init(a->nb_etat);
+    Ensemble_eat_list(Q,a->initiaux);
+    Q = Automate_cloture_instantanee_inplace(a,Q);
+    Ensemble* Q_init = Ensemble_copy(Q);
+
+    ListArray* indexs = ListArray_init();
+    size_t current_index = 0;
+
+    //printf("avant lecture : \n");
+    //Ensemble_print(Q);
+
+    while (line[current_index]!='\0')// tant que toutes la chaîne n'a pas été lue
+    {
+        Lettre l = line[current_index];
+        Ensemble* next_Q = Automate_cloture_instantanee_inplace(a,Automate_read_letter(a,Q,l));
+        bool next_Q_final = Automate_is_final_ensemble(a,next_Q);
+
+        //printf("lecture de la lettre %c, etat_final=%d, Q = ",(char)l,next_Q_final);Ensemble_print(next_Q);
+
+
+        if(next_Q_final)
+        {
+            // current_index est donc le dernier carectère d'un motif reconnu
+            ListArray_push(indexs,current_index);
+            Ensemble_free(next_Q);
+            next_Q = Ensemble_copy(Q_init);
+        }
+
+
+        current_index++;
+        Ensemble_free(Q);
+        Q = next_Q;
+    }
+    
+    if(Automate_is_final_ensemble(a,Q))
+    {
+        // la dernière séquence est reconnu
+        ListArray_push(indexs,current_index);
+    }
+
+    Ensemble_free(Q);
+    Ensemble_free(Q_init);
+    Automate_free(a);
+    //printf("retour des index initiaux : ");ListArray_print(indexs);printf("\n");
+    return indexs;
+}
+
+/// @brief Retrouve les index de début des motifs reconnu par `a` dans `line`
+/// à partir des index de fin de ces même motifs, (obtenu précedemment avec `find_motif_end_indexs`)
+/// @param a 
+/// @param line 
+/// @param end_indexs 
+/// @return 
+ListArray* find_motif_start_indexs(Automate* a,char* line,ListArray* end_indexs)
+{
+    Automate* b = Automate_reverse(a);
+    ListArray* indexs = ListArray_init();
+
+    for(size_t i=0;i<end_indexs->size;i++)
+    {
+        size_t end = end_indexs->data[i];
+        Ensemble* Q = Ensemble_init(b->nb_etat);
+        Ensemble_eat_list(Q,b->initiaux);
+        Q = Automate_cloture_instantanee_inplace(b,Q);
+
+        size_t current_index = end;
+        while (!Automate_is_final_ensemble(b,Q))
+        {
+            Lettre l = line[current_index];
+            Ensemble* next_Q = Automate_cloture_instantanee_inplace(b,Automate_read_letter(b,Q,l));
+            Ensemble_free(Q);
+            Q = next_Q;
+            current_index--;
+        }
+        ListArray_push(indexs,current_index+1);
+        Ensemble_free(Q);
+    }
+    Automate_free(b);
+    return indexs;
+}
+
+/// @brief lit une ligne d'un flux
+/// @param flux 
+/// @return 
+char* get_line(FILE* flux)
+{
+    ListArray* list = ListArray_init();
+    int l = getc(flux);
+    if(l<=0)goto EOF_HAPPEND;
+    if(l=='\n' && flux==stdin)goto EOF_HAPPEND;
+
+    while (l!='\n' && l>0)
+    {
+        ListArray_push(list,l);
+        l = getc(flux);
+    }
+    ListArray_push(list,'\0');
+
+    //printf("lecture de %ld octets : ",list->size);ListArray_print(list);printf("\n");
+    char* line = malloc(sizeof(char)*list->size);
+    for(size_t i=0;i<list->size;i++)
+        line[i] = list->data[i];
+    
+    ListArray_free(list);
+    return line;
+
+    EOF_HAPPEND:
+    ListArray_free(list);
+    return NULL;
+}
+
+enum COLOR
+{
+    WHITE,
+    RED
 };
+
+void set_stdout_color(enum COLOR color)
+{
+    switch (color)
+    {
+    case WHITE:
+        printf("\e[0;37m");
+        break;
+    case RED:
+        printf("\e[0;31m");
+        break;
+    default:
+        break;
+    }
+}
+
+void afficher_motifs(char* line,ListArray* starts,ListArray* ends)
+{
+    size_t current_index = 0;
+    for(size_t i =0;i<starts->size;i++)
+    {
+        size_t start = starts->data[i];
+        size_t end = ends->data[i];
+
+        while (current_index<start)
+        {
+            putc(line[current_index++],stdout);
+        }
+        
+        set_stdout_color(RED);
+        while (current_index<=end)
+        {
+            putc(line[current_index++],stdout);
+        }
+        set_stdout_color(WHITE);
+    }
+
+    while (line[current_index]!='\0')
+    {
+        putc(line[current_index++],stdout);
+    }
+    putc('\n',stdout);
+}
+
 
 int main(int argc,char** argv)
 {
     char* input_filename = NULL;
     char* regular_expression = NULL;
-    enum SOURCE source = SOURCE_STDIN;
+    FILE* source = NULL;
+    
+    if(argc<2)
+    {
+        fprintf(stderr,"Argument maquant !\n");
+        return 1;
+    }
 
     for(size_t i=1;i<argc;i++)
     {
@@ -1099,7 +1397,6 @@ int main(int argc,char** argv)
             regular_expression = argv[++i];
         }else
         {
-            source = SOURCE_FILE;
             input_filename = arg;
         }
     }
@@ -1111,7 +1408,7 @@ int main(int argc,char** argv)
     //    regular_expression = reg;
 
     printf("Recherche du motif \'%s\' dans ",regular_expression);
-    if(source==SOURCE_FILE)
+    if(input_filename!=NULL)
     {
         printf("le fichier %s \n",input_filename);
     }else
@@ -1120,22 +1417,47 @@ int main(int argc,char** argv)
     }
 
     Tree* t = make_syntaxique_tree(regular_expression);
-    Tree_print(t);
-    printf("\n");
+
 
     Automate* a = make_thomson_automate(t);
     if(a==NULL)
         printf("Impossible de construire l'automate associé à l'expression %s !\n",regular_expression);
-    Automate_print(a);
 
-    if(source == SOURCE_FILE)
+    if(input_filename==NULL)
     {
-        bool reconaissance = Automate_read_word(a,input_filename);
-        if(reconaissance)
-            printf("Le mot \"%s\" est reconnu par l'expression rationnelle \"%s\" !\n",input_filename,regular_expression);
-        else
-            printf("Le mot \"%s\" n'est pas reconnu par l'expression \"%s\" !\n",input_filename,regular_expression);
+        source = stdin;
+    }else
+    {
+        source = fopen(input_filename,"r");
+        if (source==NULL)
+        {
+            fprintf(stderr,"Impossible d'ouvrir le fichier %s!\n",input_filename);
+            return 1;
+        }
+        
     }
+
+    size_t line_count = 0;
+    char* line = NULL;
+    while ((line=get_line(source))!=NULL)
+    {
+        printf("lecture de \"%s\"\n",line);
+        ListArray* ends = find_motif_end_indexs(a,line);
+        ListArray* starts = find_motif_start_indexs(a,line,ends);
+
+        if(starts->size>0)
+        {
+            printf("%ld : ",line_count);
+            afficher_motifs(line,starts,ends);
+        }
+
+        ListArray_free(starts);
+        ListArray_free(ends);
+        free(line);
+        line_count++;
+    }
+    
+
     if(a!=NULL)Automate_free(a);
     if(t!=NULL)Tree_free(t);
 

@@ -1,6 +1,6 @@
 CFLAGS= -Wall -Werror
 DEBUG_FLAGS= -g -fsanitize=address -O0
-RELEASE_FLAGS= -O2
+RELEASE_FLAGS= -Ofast
 
 
 debug : CFLAGS+=$(DEBUG_FLAGS)

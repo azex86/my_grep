@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -15,16 +17,16 @@ typedef size_t Lettre;
 */
 
 #define SYNTAXE_OPERATOR_CONCATENATION '@' // priorité 1
-#define SYNTAXE_OPERATOR_ETOILE '*' // priorité 0
-#define SYNTAXE_OPERATOR_UNION '|'  // priorité 2
-#define SYNTAXE_OPERATOR_SIGMA '?'
-#define SYNTAXE_OPERATOR_JOKER '.'
+#define SYNTAXE_OPERATOR_ETOILE '*' // priorité 1
+#define SYNTAXE_OPERATOR_UNION '|'  // priorité 3
+#define SYNTAXE_OPERATOR_SIGMA '.'
+#define SYNTAXE_OPERATOR_JOKER '?' 
 
-char OPERATORS[] = {SYNTAXE_OPERATOR_ETOILE,SYNTAXE_OPERATOR_CONCATENATION,SYNTAXE_OPERATOR_UNION};
+Lettre OPERATORS[] = {SYNTAXE_OPERATOR_ETOILE,SYNTAXE_OPERATOR_CONCATENATION,SYNTAXE_OPERATOR_UNION};
 
 struct Tree
 {
-    char etiquette;
+    Lettre etiquette;
 
     struct Tree* left_chilfren;
     struct Tree* right_children;
@@ -38,7 +40,7 @@ struct Tree
 /// @note si et seulement si le noeud n'a qu'un seul enfant `right_children=NULL`
 typedef struct Tree Tree;
 
-Tree* Tree_init(char etiquette,Tree* left,Tree* right)
+Tree* Tree_init(Lettre etiquette,Tree* left,Tree* right)
 {
     Tree* t = malloc(sizeof(Tree));
     t->etiquette = etiquette;
@@ -77,7 +79,8 @@ void Tree_print(Tree* tree)
         Tree_print(tree->left_chilfren);
         printf(")");
     }
-    printf("%c",tree->etiquette);
+    //printf("%c[%ld]",(char)tree->etiquette,tree->etiquette);
+    printf("%c",(char)tree->etiquette);
     if(tree->right_children!=NULL)
     {
         printf("(");
@@ -139,16 +142,16 @@ Tree* char_slice(Tree** er,size_t er_size)
 /// @example operator_binaire_slice("a|a@a",5,2) -> un arbre dont l'affichage est : ((a)|(a))@(a)
 Tree* operator_unaire_slice(Tree** er,size_t er_size,int operator_priority)
 {
-    char operator = OPERATORS[operator_priority];
+    Lettre operator = OPERATORS[operator_priority];
 
-    //printf("Recherche de l'opérateur %c de priorité %d sur ",operator,operator_priority);
-    //for(int i=0;i<er_size;i++)
+    // printf("Recherche de l'opérateur %c de priorité %d sur ",(char)operator,operator_priority);
+    // for(int i=0;i<er_size;i++)
     //    if(er[i]!=NULL)
     //    {
     //         if(is_racine(er[i]))
-    //             printf("%c",er[i]->etiquette);
+    //             printf("%c",(char)er[i]->etiquette);
     //         else
-    //             printf("(%c)",er[i]->etiquette);
+    //             printf("(%c)",(char)er[i]->etiquette);
     //     }
         
     // printf("\n");
@@ -165,7 +168,7 @@ Tree* operator_unaire_slice(Tree** er,size_t er_size,int operator_priority)
         if(er[index]->etiquette==operator && is_racine(er[index]))
         {
             // on a trouvé un opérateur
-            // on lui passe comme argument la dernière expression rencontrée : current_tree
+            // on lui passe comme argument la dernière expression rencontrée : last_tree
             // puis on concatène avec l'arbre de l'expression antérieur 
             // puis on concatène avec l'arbre de la suite
             
@@ -222,17 +225,18 @@ Tree* operator_binaire_slice(Tree** er,size_t er_size,int operator_priority)
         return operator_unaire_slice(er,er_size,0);
     }
 
-    char operator = OPERATORS[operator_priority];
+    Lettre operator = OPERATORS[operator_priority];
 
-    // printf("Recherche de l'opérateur %c de priorité %d sur ",operator,operator_priority);
+    // printf("Recherche de l'opérateur %c de priorité %d sur ",(char)operator,operator_priority);
     // for(int i=0;i<er_size;i++)
     //     if(er[i]!=NULL)
     //     {
     //         if(is_racine(er[i]))
-    //             printf("%c",er[i]->etiquette);
+    //             printf("%c",(char)er[i]->etiquette);
     //         else
-    //             printf("(%c)",er[i]->etiquette);
+    //             printf("(%c)",(char)er[i]->etiquette);
     //     }
+
 
     // printf("\n");
 
@@ -273,7 +277,41 @@ Tree* operator_binaire_slice(Tree** er,size_t er_size,int operator_priority)
     return current_tree;
 }
 
+/// @brief fusionne les "a?" en (a)? 
+/// @param regular_trees 
+/// @param size 
+/// @return le nombre d'opérateur rencontrés, -1 en cas d'erreur 
+int operator_joker_merge(Tree** er,size_t er_size)
+{
+    int count = 0;
+    Tree* last_tree = NULL;
+    size_t last_tree_index = 0;
+    for(size_t index=0;index<er_size;index++)
+    {
+        if(er[index] == NULL)
+        {
+            continue;
+        }
+        if(er[index]->etiquette == SYNTAXE_OPERATOR_JOKER)
+        {
+            if(last_tree==NULL)
+            {
+                fprintf(stderr,"Impossible d'attacher un opérateur joker('?') à une lettre\n");
+                return -1;
+            }
 
+            er[index]->left_chilfren = last_tree;
+            er[last_tree_index] = NULL;
+            count++;
+        }else
+        {
+            last_tree = er[index];
+            last_tree_index = index;
+        }
+    }
+
+    return count;
+}
 
 
 /// @brief fusionne les arbres entre la parenthèse ouvrante à l'index 0 et sa parenthèse fermante associée
@@ -345,14 +383,24 @@ size_t parentheses_merge(Tree** regular_trees,size_t size)
     return 0;    
 }
 
-Tree* make_syntaxique_tree(char* er)
+size_t str_len(Lettre* str)
+{
+    size_t size = 0;
+    while (str[size]!=0)
+    {
+        size++;
+    }
+    return size;
+}
+
+Tree* make_syntaxique_tree(Lettre* er)
 {
     /*
         idée : transformer le char* en une liste d'arbre
                 faire un premier passage pour les parenthèses qui fusionnera certains arbres
             lancer l'analyse classique pour faire le reste
     */
-    size_t er_size = strlen(er);
+    size_t er_size = str_len(er);
     Tree** trees = malloc(sizeof(Tree*)*er_size);
 
     // transformation de ma chaîne de caractère en arbres 
@@ -360,6 +408,11 @@ Tree* make_syntaxique_tree(char* er)
     {
         trees[i] = Tree_init(er[i],NULL,NULL);
     }
+
+    // gestion des ?
+    int error = operator_joker_merge(trees,er_size);
+    if(error==-1)
+        return NULL;
 
     // fusion par parenthèse
     for(size_t i=0;i<er_size;i++)
@@ -372,13 +425,13 @@ Tree* make_syntaxique_tree(char* er)
                 }
     }
 
-    printf("Après fusion des parenthèses : [");
-    for(size_t i=0;i<er_size;i++)
-    {
-        Tree_print(trees[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("Après fusion des parenthèses : [");
+    // for(size_t i=0;i<er_size;i++)
+    // {
+    //     Tree_print(trees[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
 
     // application des fusions des opérateurs
     Tree* t = operator_binaire_slice(trees,er_size,2);
@@ -392,8 +445,8 @@ Tree* make_syntaxique_tree(char* er)
     Création d'un automate à partir d'un arbre syntaxique
     Algorithme de Thomson
 
-        le ? est équivalent à SIGMA : automate équivalent ->()-a,b,...->()->
-        le . est équivalent à SIGMA* : automate équivalent ->(())<-a,b,....>
+        le a? est équivalent à a|epsilon : automate équivalent ->()-epsilon,a->()->
+        le . est équivalent à SIGMA : automate équivalent ->(())<-a,b,....>
 */
 
 #define MIN_LISTARRAY_CAPACITY 1000
@@ -546,10 +599,10 @@ void ListArray_extend(ListArray* dest,ListArray* source)
         ListArray_push(dest,source->data[i]);
 }
 
-#define ALPHABET_SIZE 1024
 #define EPSILON_TRANSITION_INDEX 0
 struct Automate
 {
+    size_t alphabet_size;
     size_t nb_etat; // nombre d'état de l'automate
     ListArray* initiaux; // liste des états initiaux de l'automate
     ListArray* finaux; // liste des états finaux de l'automate
@@ -560,17 +613,18 @@ struct Automate
 };
 typedef struct Automate Automate;
 
-Automate* Automate_init(size_t nb_etat)
+Automate* Automate_init(size_t nb_etat,size_t alphabet_size)
 {
     Automate* a = malloc(sizeof(Automate));
+    a->alphabet_size = alphabet_size;
     a->nb_etat = nb_etat;
     a->initiaux = ListArray_init();
     a->finaux = ListArray_init();
     a->transitions = malloc(sizeof(ListArray**)*nb_etat);
     for(size_t i=0;i<nb_etat;i++)
     {
-        a->transitions[i] = malloc(sizeof(ListArray*)*ALPHABET_SIZE);
-        for(size_t l=0;l<ALPHABET_SIZE;l++)
+        a->transitions[i] = malloc(sizeof(ListArray*)*alphabet_size);
+        for(size_t l=0;l<alphabet_size;l++)
         {
             a->transitions[i][l] = ListArray_init();
         }
@@ -586,7 +640,7 @@ void Automate_free(Automate* a)
     ListArray_free(a->finaux);
     for(size_t i=0;i<a->nb_etat;i++)
     {
-        for(size_t l=0;l<ALPHABET_SIZE;l++)
+        for(size_t l=0;l<a->alphabet_size;l++)
             ListArray_free(a->transitions[i][l]);
         free(a->transitions[i]);
     }
@@ -599,13 +653,14 @@ void Automate_free(Automate* a)
 void Automate_print(Automate* a)
 {
     if(a==NULL)return;
+    printf("taille de l'aphabet : %ld\n",a->alphabet_size);
     printf("nombre d'état : %ld\n",a->nb_etat);
     printf("Etats initiaux : "); ListArray_print(a->initiaux);
     printf("Etats finaux : ");ListArray_print(a->finaux);
     for (size_t i = 0; i < a->nb_etat; i++)
     {
         printf("Depuis le sommet %ld : [",i);
-        for(size_t lettre =0;lettre<ALPHABET_SIZE;lettre++)
+        for(size_t lettre =0;lettre<a->alphabet_size;lettre++)
             for(size_t j=0;j<a->transitions[i][lettre]->size;j++)
                 printf("(%c,%ld);",(char)lettre,a->transitions[i][lettre]->data[j]);
         printf("]\n");
@@ -615,13 +670,13 @@ void Automate_print(Automate* a)
 
 Automate* Automate_copy(Automate* a)
 {
-    Automate* b = Automate_init(a->nb_etat);
+    Automate* b = Automate_init(a->nb_etat,a->alphabet_size);
     ListArray_extend(b->initiaux,a->initiaux);
     ListArray_extend(b->finaux,a->finaux);
 
     for(Sommet source=0;source<a->nb_etat;source++)
     {
-        for(Lettre l=0;l<ALPHABET_SIZE;l++)
+        for(Lettre l=0;l<a->alphabet_size;l++)
         {
             ListArray_extend(b->transitions[source][l],a->transitions[source][l]);
         }
@@ -648,14 +703,14 @@ void ListArray_reindexation(ListArray* list,size_t delta_index)
 /// @param a 
 /// @param delta_index 
 /// @warning après l'usage de cette fonction un automate n'est plus utilisable en l'état sous peine de lecture hors mémoire
-void Automate_reindexation(Automate* a,size_t delta_index)
+void Automate_reindexation(Automate* a,long long delta_index)
 {
     delta_index_to_reindexationn_fun = delta_index;
 
     ListArray_map(a->initiaux,reindexation);
     ListArray_map(a->finaux,reindexation);
     for(size_t i=0;i<a->nb_etat;i++)
-        for(size_t l=0;l<ALPHABET_SIZE;l++)
+        for(size_t l=0;l<a->alphabet_size;l++)
             ListArray_map(a->transitions[i][l],reindexation);
 
     delta_index_to_reindexationn_fun = 0;
@@ -677,14 +732,6 @@ void Automate_add_transition(Automate* a,size_t source,size_t lettre,size_t dest
 }
 
 
-/// @brief instancie une version normalisée d'un automate avec un seul état initial et un seul état final
-/// @param a 
-/// @warning pas encore implémenté
-/// @return 
-Automate* Automate_normalisation(Automate* a)
-{
-    return NULL;
-}
 
 /// @brief instancie un nouvel automate qui possède les états et transitions
 /// des deux automates passés en argument (avec une réindexation de +a1->nb_etat sur a2)
@@ -694,7 +741,7 @@ Automate* Automate_normalisation(Automate* a)
 /// @return 
 Automate* Automate_merge(Automate* a1,Automate* a2)
 {
-    Automate* b = Automate_init(a1->nb_etat+a2->nb_etat);
+    Automate* b = Automate_init(a1->nb_etat+a2->nb_etat,max(a1->alphabet_size,a2->alphabet_size));
     size_t delta_index = a1->nb_etat;
     // on réindexe temporairement a2
     Automate_reindexation(a2,delta_index);
@@ -702,7 +749,7 @@ Automate* Automate_merge(Automate* a1,Automate* a2)
     // on copie maintenant les transitions
     for(size_t etat_source=0;etat_source<a1->nb_etat;etat_source++)
     {
-        for(size_t l=0;l<ALPHABET_SIZE;l++)
+        for(Lettre l=0;l<a1->alphabet_size;l++)
         {
             ListArray_extend(b->transitions[etat_source][l],a1->transitions[etat_source][l]);
         }
@@ -710,7 +757,7 @@ Automate* Automate_merge(Automate* a1,Automate* a2)
 
     for(size_t etat_source=0;etat_source<a2->nb_etat;etat_source++)
     {
-        for(size_t l=0;l<ALPHABET_SIZE;l++)
+        for(Lettre l=0;l<a2->alphabet_size;l++)
         {
             ListArray_extend(b->transitions[etat_source+delta_index][l],a2->transitions[etat_source][l]);
         }
@@ -718,7 +765,7 @@ Automate* Automate_merge(Automate* a1,Automate* a2)
     
     
     // on répare a2
-    Automate_reindexation(a2,-a1->nb_etat);
+    Automate_reindexation(a2,-(long long)a1->nb_etat);
 
     return b;
 }
@@ -726,10 +773,10 @@ Automate* Automate_merge(Automate* a1,Automate* a2)
 /// @brief Retourne un automate reconnaissant une lettre de l'alphabet
 /// @param lettre 
 /// @return 
-Automate* Automate_lettre(size_t lettre)
+Automate* Automate_lettre(Lettre lettre,size_t alphabet_size)
 {
     // ->()--lettre-->()->
-    Automate* a = Automate_init(2);
+    Automate* a = Automate_init(2,alphabet_size);
     Automate_add_etat_initial(a,0);
     Automate_add_etat_final(a,1);
 
@@ -795,10 +842,10 @@ Automate* Automate_etoile(Automate* a)
     // on relie tous les états initiaux de a depuis cet état
     // on relie tous les états finaux de a vers cet état
 
-    printf("automate etoile : entrée : ");
-    Automate_print(a);
+    // printf("automate etoile : entrée : ");
+    // Automate_print(a);
 
-    Automate* b = Automate_init(a->nb_etat+1);
+    Automate* b = Automate_init(a->nb_etat+1,a->alphabet_size);
     Sommet q = a->nb_etat;
     ListArray_push(b->initiaux,q);
     ListArray_push(b->finaux,q);
@@ -806,7 +853,7 @@ Automate* Automate_etoile(Automate* a)
     // on copie les transitions
     for(Sommet source =0;source<a->nb_etat;source++)
     {
-        for(size_t lettre = 0;lettre<ALPHABET_SIZE;lettre++)
+        for(size_t lettre = 0;lettre<a->alphabet_size;lettre++)
         {
             ListArray_extend(b->transitions[source][lettre],a->transitions[source][lettre]);
         }
@@ -823,40 +870,47 @@ Automate* Automate_etoile(Automate* a)
     {
         Automate_add_transition(b,a->finaux->data[i],EPSILON_TRANSITION_INDEX,q);
     }
-    printf("sortie : ");
-    Automate_print(b);
+    // printf("sortie : ");
+    // Automate_print(b);
     return b;
 }
 
 
-Automate* Automate_joker()
+Automate* Automate_joker(Automate* a)
 {
-    // automate reconnaissant tous les mots (même le mot vide)
-    Automate* a = Automate_init(1);
-    Automate_add_etat_initial(a,0);
-    Automate_add_etat_final(a,0);
-    for(size_t l=0;l<ALPHABET_SIZE;l++)
+    // automate reconnaissant une fois a ou rien
+    // on copie a, on ajoute un état, on met cet état comme final et initial
+
+    Automate* b = Automate_init(a->nb_etat+1,a->alphabet_size);
+    ListArray_extend(b->initiaux,a->initiaux);
+    ListArray_extend(b->finaux,a->finaux);
+    for(Sommet s=0;s<a->nb_etat;s++)
     {
-        Automate_add_transition(a,0,l,0);
+        for(Lettre l=0;l<a->alphabet_size;l++)
+        {
+            ListArray_extend(b->transitions[s][l],a->transitions[s][l]);
+        }
     }
-    return a;
+
+    ListArray_push(b->initiaux,a->nb_etat);
+    ListArray_push(b->finaux,a->nb_etat);
+    return b;
 }
 
-Automate* Automate_sigma()
+Automate* Automate_sigma(size_t alphabet_size)
 {
-    // automate reconnaissant tous caractère de l'alphabet
-    Automate* a = Automate_init(2);
+    // automate reconnaissant tous caractère de l'alphabet et aucun
+    Automate* a = Automate_init(2,alphabet_size);
     Automate_add_etat_initial(a,0);
     Automate_add_etat_final(a,1);
-    for(size_t l=0;l<ALPHABET_SIZE;l++)
+    for(size_t l=0;l<alphabet_size;l++)
     {
-        if(l!=EPSILON_TRANSITION_INDEX) // on ne reconnait pas le mot vide
-            Automate_add_transition(a,0,l,1);
+         Automate_add_transition(a,0,l,1);
     }
     return a;
 }
 
-Automate* make_thomson_automate(Tree* syntaxique_tree)
+Automate* make_thomson_automate(Tree* syntaxique_tree,size_t alphabet_size)
 {
     if(syntaxique_tree==NULL)
         return NULL;
@@ -871,8 +925,8 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
     {
         
         case SYNTAXE_OPERATOR_CONCATENATION:
-            a = make_thomson_automate(syntaxique_tree->left_chilfren);
-            b = make_thomson_automate(syntaxique_tree->right_children);
+            a = make_thomson_automate(syntaxique_tree->left_chilfren,alphabet_size);
+            b = make_thomson_automate(syntaxique_tree->right_children,alphabet_size);
 
             if(a==NULL)
             {
@@ -893,8 +947,8 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
             return c;
             break;
         case SYNTAXE_OPERATOR_UNION:
-            a = make_thomson_automate(syntaxique_tree->left_chilfren);
-            b = make_thomson_automate(syntaxique_tree->right_children);
+            a = make_thomson_automate(syntaxique_tree->left_chilfren,alphabet_size);
+            b = make_thomson_automate(syntaxique_tree->right_children,alphabet_size);
 
             if(a!=NULL && b!=NULL)
             {
@@ -913,7 +967,7 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
 
             break;
         case SYNTAXE_OPERATOR_ETOILE:
-            a = make_thomson_automate(syntaxique_tree->left_chilfren);
+            a = make_thomson_automate(syntaxique_tree->left_chilfren,alphabet_size);
             if(a==NULL) return NULL;
 
             b = Automate_etoile(a);
@@ -921,15 +975,16 @@ Automate* make_thomson_automate(Tree* syntaxique_tree)
             return b;    
             break;
         case SYNTAXE_OPERATOR_JOKER:
-            return Automate_joker();
+            a = make_thomson_automate(syntaxique_tree->left_chilfren,alphabet_size);
+            return Automate_joker(a);
             break;
         case SYNTAXE_OPERATOR_SIGMA:
-            return Automate_sigma();
+            return Automate_sigma(alphabet_size);
             break;
 
         default:
             // lettre "normal"
-            return Automate_lettre(syntaxique_tree->etiquette);
+            return Automate_lettre(syntaxique_tree->etiquette,alphabet_size);
             break;
     }
 
@@ -1103,6 +1158,12 @@ Ensemble* Automate_cloture_instantanee_inplace(Automate* a,Ensemble* e)
 /// @return 
 Ensemble* Automate_read_letter(Automate* a,Ensemble* e,size_t l)
 {
+    if(l>a->alphabet_size)
+    {
+        fprintf(stderr,"Impossible de lire la lettre %c(%ld) avec un automate d'alphabet de taille %ld\n",(char)l,l,a->alphabet_size);
+        return Ensemble_init(a->nb_etat);
+    }
+
     Ensemble* dest = Ensemble_init(a->nb_etat);
     
     for (size_t i = 0; i < a->nb_etat; i++)
@@ -1135,7 +1196,7 @@ bool Automate_is_final_ensemble(Automate* a,Ensemble* e)
 /// @param e 
 /// @param word 
 /// @return 
-bool Automate_read_word(Automate* a,char* word)
+bool Automate_read_word(Automate* a,Lettre* word)
 {
     // on initialise un ensemble avec les états initiaux et les états dans la cloture instantanée des états initiaux
     Ensemble* initiaux = Ensemble_init(a->nb_etat);
@@ -1149,7 +1210,7 @@ bool Automate_read_word(Automate* a,char* word)
 
     // on lit ensuite chaque lettre de manière itérative
     // sans oublie de calculer la cloture instantanée à chaque fois
-    for(size_t index=0;word[index]!='\0';index++)
+    for(size_t index=0;word[index]!=0;index++)
     {
         temp = Automate_read_letter(a,initiaux,word[index]);
         //printf("Après lecture de la lettre '%c'\n",word[index]);
@@ -1174,7 +1235,7 @@ bool Automate_read_word(Automate* a,char* word)
 /// @return un nouvel automate
 Automate* Automate_reverse(Automate* a)
 {
-    Automate* b = Automate_init(a->nb_etat);
+    Automate* b = Automate_init(a->nb_etat,a->alphabet_size);
     
     // on inverse initiaux et finaux
     ListArray_extend(b->initiaux,a->finaux);
@@ -1183,7 +1244,7 @@ Automate* Automate_reverse(Automate* a)
     // on inverse les transitions
     for(Sommet source=0;source<a->nb_etat;source++)
     {
-        for(Lettre l=0;l<ALPHABET_SIZE;l++)
+        for(Lettre l=0;l<a->alphabet_size;l++)
         {
             for(size_t i=0;i<a->transitions[source][l]->size;i++)
             {
@@ -1197,6 +1258,16 @@ Automate* Automate_reverse(Automate* a)
 }
 
 
+Automate* Automate_line(Automate* a)
+{
+    // on construit l'automate reconnaissant ".e" avec e l'expression régulière dont le langage est dénoté par a
+    // c'est à dire "(.)*e" 
+    Automate* b = Automate_sigma(a->alphabet_size);
+    Automate* temp = Automate_concatenation(b,a);
+    Automate_free(b);
+    return temp;
+}
+
 /// @brief lit une chaîne de caractère et détecte les motifs reconnu par l'automate `a`
 /// et renvoie une liste des index de fin de ces motifs dans la chaîne `line`
 /// @note on privilégiera toujours les motifs les plus petits : 
@@ -1205,19 +1276,11 @@ Automate* Automate_reverse(Automate* a)
 /// @param a 
 /// @param line 
 /// @return 
-ListArray* find_motif_end_indexs(Automate* a,char* line)
+ListArray* find_motif_end_indexs(Automate* line_automate,Lettre* line)
 {
-    // on construit l'automate reconnaissant ".e" avec e l'expression régulière dont le langage est dénoté par a
-    // c'est à dire "(SIGMA)*e" 
-    Automate* b = Automate_joker();
-    a = Automate_concatenation(b,a);
-    Automate_free(b);
-
-    //Automate_print(a);
-
-    Ensemble* Q = Ensemble_init(a->nb_etat);
-    Ensemble_eat_list(Q,a->initiaux);
-    Q = Automate_cloture_instantanee_inplace(a,Q);
+    Ensemble* Q = Ensemble_init(line_automate->nb_etat);
+    Ensemble_eat_list(Q,line_automate->initiaux);
+    Q = Automate_cloture_instantanee_inplace(line_automate,Q);
     Ensemble* Q_init = Ensemble_copy(Q);
 
     ListArray* indexs = ListArray_init();
@@ -1229,8 +1292,8 @@ ListArray* find_motif_end_indexs(Automate* a,char* line)
     while (line[current_index]!='\0')// tant que toutes la chaîne n'a pas été lue
     {
         Lettre l = line[current_index];
-        Ensemble* next_Q = Automate_cloture_instantanee_inplace(a,Automate_read_letter(a,Q,l));
-        bool next_Q_final = Automate_is_final_ensemble(a,next_Q);
+        Ensemble* next_Q = Automate_cloture_instantanee_inplace(line_automate,Automate_read_letter(line_automate,Q,l));
+        bool next_Q_final = Automate_is_final_ensemble(line_automate,next_Q);
 
         //printf("lecture de la lettre %c, etat_final=%d, Q = ",(char)l,next_Q_final);Ensemble_print(next_Q);
 
@@ -1249,7 +1312,7 @@ ListArray* find_motif_end_indexs(Automate* a,char* line)
         Q = next_Q;
     }
     
-    if(Automate_is_final_ensemble(a,Q))
+    if(Automate_is_final_ensemble(line_automate,Q))
     {
         // la dernière séquence est reconnu
         ListArray_push(indexs,current_index);
@@ -1257,7 +1320,6 @@ ListArray* find_motif_end_indexs(Automate* a,char* line)
 
     Ensemble_free(Q);
     Ensemble_free(Q_init);
-    Automate_free(a);
     //printf("retour des index initiaux : ");ListArray_print(indexs);printf("\n");
     return indexs;
 }
@@ -1268,23 +1330,22 @@ ListArray* find_motif_end_indexs(Automate* a,char* line)
 /// @param line 
 /// @param end_indexs 
 /// @return 
-ListArray* find_motif_start_indexs(Automate* a,char* line,ListArray* end_indexs)
+ListArray* find_motif_start_indexs(Automate* reverse_automate,Lettre* line,ListArray* end_indexs)
 {
-    Automate* b = Automate_reverse(a);
     ListArray* indexs = ListArray_init();
 
     for(size_t i=0;i<end_indexs->size;i++)
     {
         size_t end = end_indexs->data[i];
-        Ensemble* Q = Ensemble_init(b->nb_etat);
-        Ensemble_eat_list(Q,b->initiaux);
-        Q = Automate_cloture_instantanee_inplace(b,Q);
+        Ensemble* Q = Ensemble_init(reverse_automate->nb_etat);
+        Ensemble_eat_list(Q,reverse_automate->initiaux);
+        Q = Automate_cloture_instantanee_inplace(reverse_automate,Q);
 
         size_t current_index = end;
-        while (!Automate_is_final_ensemble(b,Q))
+        while (!Automate_is_final_ensemble(reverse_automate,Q))
         {
             Lettre l = line[current_index];
-            Ensemble* next_Q = Automate_cloture_instantanee_inplace(b,Automate_read_letter(b,Q,l));
+            Ensemble* next_Q = Automate_cloture_instantanee_inplace(reverse_automate,Automate_read_letter(reverse_automate,Q,l));
             Ensemble_free(Q);
             Q = next_Q;
             current_index--;
@@ -1292,14 +1353,13 @@ ListArray* find_motif_start_indexs(Automate* a,char* line,ListArray* end_indexs)
         ListArray_push(indexs,current_index+1);
         Ensemble_free(Q);
     }
-    Automate_free(b);
     return indexs;
 }
 
 /// @brief lit une ligne d'un flux
 /// @param flux 
 /// @return 
-char* get_line(FILE* flux)
+Lettre* get_line(FILE* flux)
 {
     ListArray* list = ListArray_init();
     int l = getc(flux);
@@ -1311,10 +1371,10 @@ char* get_line(FILE* flux)
         ListArray_push(list,l);
         l = getc(flux);
     }
-    ListArray_push(list,'\0');
+    ListArray_push(list,0);
 
     //printf("lecture de %ld octets : ",list->size);ListArray_print(list);printf("\n");
-    char* line = malloc(sizeof(char)*list->size);
+    Lettre* line = malloc(sizeof(Lettre)*list->size);
     for(size_t i=0;i<list->size;i++)
         line[i] = list->data[i];
     
@@ -1347,7 +1407,7 @@ void set_stdout_color(enum COLOR color)
     }
 }
 
-void afficher_motifs(char* line,ListArray* starts,ListArray* ends)
+void afficher_motifs(Lettre* line,ListArray* starts,ListArray* ends)
 {
     size_t current_index = 0;
     for(size_t i =0;i<starts->size;i++)
@@ -1375,18 +1435,25 @@ void afficher_motifs(char* line,ListArray* starts,ListArray* ends)
     putc('\n',stdout);
 }
 
+Lettre* translate(char* sentence,size_t alphabet_size)
+{
+    size_t size = strlen(sentence);
+    Lettre* line = malloc(sizeof(Lettre)*(size+1));
+    for(size_t i=0;i<size;i++)
+        line[i] = sentence[i];
+    line[size] = 0;
+    return line;
+}
 
 int main(int argc,char** argv)
 {
+    bool extended_expression = false;
     char* input_filename = NULL;
-    char* regular_expression = NULL;
+    char* regular_expression_char = NULL;
     FILE* source = NULL;
-    
-    if(argc<2)
-    {
-        fprintf(stderr,"Argument maquant !\n");
-        return 1;
-    }
+    size_t alphabet_size = 255;
+    bool verbose = false;
+    bool show_line = false;
 
     for(size_t i=1;i<argc;i++)
     {
@@ -1394,40 +1461,82 @@ int main(int argc,char** argv)
 
         if(strcmp(arg,"-E")==0)
         {
-            regular_expression = argv[++i];
-        }else
+            extended_expression = true;
+        }else if(strcmp(arg,"--alphabet")==0 || strcmp(arg,"-A")==0)
         {
-            input_filename = arg;
+            alphabet_size = atoll(argv[++i]);
+        }else if(strcmp(arg,"--verbose")==0)
+        {
+            verbose= true;
+        }else if(strcmp(arg,"--line")==0)
+        {
+            show_line = true;
+        }
+        else
+        {
+            if(regular_expression_char==NULL)
+                regular_expression_char = arg;
+            else
+                input_filename = arg;
         }
     }
 
-
-
-    //char* reg = "aa";//"(a|b)*ab(a|b)*";
-    //if(regular_expression==NULL)
-    //    regular_expression = reg;
-
-    printf("Recherche du motif \'%s\' dans ",regular_expression);
-    if(input_filename!=NULL)
+    if(regular_expression_char==NULL)
     {
-        printf("le fichier %s \n",input_filename);
-    }else
-    {
-        printf("l'entrée standard\n");
+        fprintf(stderr,"Argument maquant !\n");
+        return 1;
     }
 
-    Tree* t = make_syntaxique_tree(regular_expression);
 
+    Lettre* regular_expression = translate(regular_expression_char,alphabet_size);
 
-    Automate* a = make_thomson_automate(t);
+    if(verbose)
+    {
+        fprintf(stderr,"Recherche du motif \'%s\' dans ",regular_expression_char);
+        if(input_filename!=NULL)
+        {
+            fprintf(stderr,"le fichier %s \n",input_filename);
+        }else
+        {
+            fprintf(stderr,"l'entrée standard\n");
+        }
+    }
+    
+    Tree* t = NULL;
+    Automate* a = NULL;
+    
+    if(extended_expression)
+    {
+        t = make_syntaxique_tree(regular_expression);
+        if(verbose)
+        {
+            printf("arbre syntaxique : ");Tree_print(t); printf("\n");
+        }
+         
+        a = make_thomson_automate(t,alphabet_size);
+        if(verbose)
+        {
+            Automate_print(a);
+        }
+
+    }else
+    {
+        fprintf(stderr,"non implémenté\n");
+        return 1;
+    }
+
     if(a==NULL)
-        printf("Impossible de construire l'automate associé à l'expression %s !\n",regular_expression);
+    {
+        fprintf(stderr,"Impossible de construire l'automate associé à l'expression %s !\n",regular_expression_char);
+        return 1;
+    }
 
     if(input_filename==NULL)
     {
         source = stdin;
     }else
     {
+
         source = fopen(input_filename,"r");
         if (source==NULL)
         {
@@ -1437,17 +1546,25 @@ int main(int argc,char** argv)
         
     }
 
+    Automate* reverse_automate = Automate_reverse(a);
+    Automate* line_automate = Automate_line(a);
+
     size_t line_count = 0;
-    char* line = NULL;
+    Lettre* line = NULL;
     while ((line=get_line(source))!=NULL)
     {
-        printf("lecture de \"%s\"\n",line);
-        ListArray* ends = find_motif_end_indexs(a,line);
-        ListArray* starts = find_motif_start_indexs(a,line,ends);
+        if(verbose)
+        {
+            printf("line %ld\r",line_count);
+        }
+        //printf("lecture de \"%s\"\n",line);
+        ListArray* ends = find_motif_end_indexs(line_automate,line);
+        ListArray* starts = find_motif_start_indexs(reverse_automate,line,ends);
 
         if(starts->size>0)
         {
-            printf("%ld : ",line_count);
+            if(show_line)
+                printf("%ld : ",line_count);
             afficher_motifs(line,starts,ends);
         }
 
@@ -1458,8 +1575,43 @@ int main(int argc,char** argv)
     }
     
 
-    if(a!=NULL)Automate_free(a);
+    if(a!=NULL)
+    {
+        Automate_free(a);
+        Automate_free(reverse_automate);
+        Automate_free(line_automate);
+    }
     if(t!=NULL)Tree_free(t);
-
+    if(regular_expression!=NULL)free(regular_expression);
     return 0;
 }
+
+
+
+/*
+
+time ./mygrep  -E "(.*q.*w.*)|(.*w.*q.*)" Donnees_grep/francais.txt 
+clownesque
+clownesques
+squaw
+squaws
+wisigothique
+wisigothiques
+
+real    0m0.370s
+user    0m0.249s
+sys     0m0.051s
+
+
+time grep -E "(^.*q.*w.*$)|(^.*w.*q.*$)" Donnees_grep/francais.txt 
+clownesque
+clownesques
+squaw
+squaws
+wisigothique
+wisigothiques
+
+real    0m0.015s
+user    0m0.002s
+sys     0m0.002s
+*/

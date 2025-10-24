@@ -374,78 +374,78 @@ int merge_parentheses(Tree** forest,size_t forest_size)
 
 Tree* merge_forest(Tree** forest,size_t forest_size)
 {
-    printf("etat initial : [");
-    for(size_t i=0;i<forest_size;i++)
-    {
-        Tree_print(forest[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("etat initial : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
 
     // fusion par parenthèse
     int error = merge_parentheses(forest,forest_size);
     if(error==-1)
         return NULL;
 
-    printf("après fusion des parenthèses : [");
-    for(size_t i=0;i<forest_size;i++)
-    {
-        Tree_print(forest[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("après fusion des parenthèses : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
 
     // gestion des ?
     error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_JOKER);
     if(error==-1)
         return NULL;
 
-    printf("après gestion des ? : [");
-    for(size_t i=0;i<forest_size;i++)
-    {
-        Tree_print(forest[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("après gestion des ? : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
 
     // gestion des *
     error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_ETOILE);
     if(error==-1)
         return NULL;
 
-    printf("après gestion des * : [");
-    for(size_t i=0;i<forest_size;i++)
-    {
-        Tree_print(forest[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("après gestion des * : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
     
     // gestion des @
     error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_CONCATENATION);
     if(error==-1)
         return NULL;
 
-    printf("après gestion des @ : [");
-    for(size_t i=0;i<forest_size;i++)
-    {
-        Tree_print(forest[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("après gestion des @ : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
 
     // gestion des |
     error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_UNION);
     if(error==-1)
         return NULL;
 
-    printf("après gestion des | : [");
-    for(size_t i=0;i<forest_size;i++)
-    {
-        Tree_print(forest[i]);
-        printf(";");
-    }
-    printf("]\n");
+    // printf("après gestion des | : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
 
     Tree* t = NULL;
     for(size_t i=0;i<forest_size;i++)
@@ -571,8 +571,28 @@ Sommet ListArray_pop(ListArray* list)
         return -1;
     }else
     {
-        return list->data[list->size--];
+        return list->data[--list->size];
     }
+}
+
+/// @brief supprime l'élément d'index `index` et le renvoie
+/// @param list 
+/// @param index 
+/// @return 
+Sommet ListArray_remove(ListArray* list,size_t index)
+{
+    if(index==list->size-1)
+    {
+        return ListArray_pop(list);
+    }else
+    {
+        Sommet temp = list->data[index];
+        list->data[index] = list->data[list->size-1];
+        list->size = list->size-1;
+        return temp;
+    }
+    
+
 }
 
 /// @brief 
@@ -1047,24 +1067,76 @@ struct Ensemble
 };
 typedef struct Ensemble Ensemble;
 
+
+ListArray* ensemble_pool = NULL;
+void Ensemble_init_pool(void)
+{
+    if(ensemble_pool==NULL)
+    {
+        ensemble_pool = ListArray_init();
+    }
+}
+
+void Ensemble_free_pool(void)
+{
+    if(ensemble_pool!=NULL)
+    {
+        for(size_t i=0;i<ensemble_pool->size;i++)
+        {
+            Ensemble* e = (Ensemble*)ensemble_pool->data[i];
+            free(e->data);
+            free(e);
+        }
+        ListArray_free(ensemble_pool);
+    }
+}
+
 /// @brief Instancie un ensemble dont le nombre d'élément ne dépassera pas `n`
 /// l'ensemble est initialement vide
 /// @param n 
 /// @return un pointeur vers un ensemble
 Ensemble* Ensemble_init(size_t n)
 {   
-    Ensemble* e = malloc(sizeof(Ensemble));
-    e->size = n;
-    e->data = malloc(sizeof(bool)*n);
-    for(size_t i=0;i<n;i++)
-        e->data[i]=false;
-    return e;
+    if(ensemble_pool==NULL)
+    {
+       Ensemble_init_pool();
+    }
+
+    {
+        Ensemble* e = NULL;
+        for(size_t i=0;i<ensemble_pool->size;i++)
+        {
+            Ensemble* current = (Ensemble*)ensemble_pool->data[i];// on utilise l'abut sizeof(Ensemble*)=sizeof(size_t)=sizeof(Sommet) (c'est à dire 64 bits)
+            if(current->size==n)
+            {
+                e = (Ensemble*)ListArray_remove(ensemble_pool,i);
+                break;
+            }
+        }
+        if(e==NULL) // pas d'ensemble à la bonne taille
+        {
+            e = malloc(sizeof(Ensemble));
+            e->size = n;
+            e->data = malloc(sizeof(bool)*n);
+        }
+        
+        for(size_t i=0;i<n;i++)
+            e->data[i]=false;
+        return e;
+        
+    }
+
+
 }
 
 void Ensemble_free(Ensemble* e)
 {
-    free(e->data);
-    free(e);
+    if(ensemble_pool==NULL)
+    {
+        Ensemble_init_pool();
+    }
+
+    ListArray_push(ensemble_pool,(Sommet)e);
 }
 
 void Ensemble_print(Ensemble* e)
@@ -1359,7 +1431,7 @@ ListArray* find_motif_end_indexs(Automate* line_automate,Lettre* line)
 
     Ensemble_free(Q);
     Ensemble_free(Q_init);
-    //printf("retour des index initiaux : ");ListArray_print(indexs);printf("\n");
+    //printf("retour des index de fins : ");ListArray_print(indexs);printf("\n");
     return indexs;
 }
 
@@ -1389,7 +1461,7 @@ ListArray* find_motif_start_indexs(Automate* reverse_automate,Lettre* line,ListA
             Q = next_Q;
             current_index--;
         }
-        ListArray_push(indexs,current_index+(current_index<end)?1:0);
+        ListArray_push(indexs,current_index+((current_index==end)?0:1)); 
         Ensemble_free(Q);
     }
     return indexs;
@@ -1490,8 +1562,6 @@ void afficher_motifs(Lettre* line,ListArray* starts,ListArray* ends)
             putc(line[current_index++],stdout);
         }
         
-        if(start==end)//motif vide
-            continue;
         set_stdout_color(RED);
         while (current_index<=end)
         {
@@ -1657,6 +1727,7 @@ int main(int argc,char** argv)
     }
     if(t!=NULL)Tree_free(t);
     if(regular_expression!=NULL)free(regular_expression);
+    Ensemble_free_pool();
     return 0;
 }
 
@@ -1672,9 +1743,9 @@ squaws
 wisigothique
 wisigothiques
 
-real    0m0.370s
-user    0m0.249s
-sys     0m0.051s
+real    0m0.279s
+user    0m0.184s
+sys     0m0.023s
 
 
 time grep -E "(^.*q.*w.*$)|(^.*w.*q.*$)" Donnees_grep/francais.txt 

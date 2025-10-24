@@ -153,7 +153,7 @@ int operator_unaire_merge(Tree** er,size_t er_size,Lettre operator)
         {
             continue;
         }
-        if(er[index]->etiquette == operator)
+        if(er[index]->etiquette == operator && is_racine(er[index]))
         {
             if(last_tree==NULL)
             {
@@ -188,7 +188,7 @@ int operator_binaire_merge(Tree** er,size_t er_size,Lettre operator)
         {
             continue;
         }
-        if(er[index]->etiquette == operator)
+        if(er[index]->etiquette == operator && is_racine(er[index]))
         {
             Tree* next_tree = get_next_tree(&er[index+1],er_size-index-1);
             if(last_tree==NULL || next_tree==NULL)
@@ -374,78 +374,78 @@ int merge_parentheses(Tree** forest,size_t forest_size)
 
 Tree* merge_forest(Tree** forest,size_t forest_size)
 {
-    // printf("etat initial : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+    printf("etat initial : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
 
     // fusion par parenthèse
     int error = merge_parentheses(forest,forest_size);
     if(error==-1)
         return NULL;
 
-    // printf("après fusion des parenthèses : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+    printf("après fusion des parenthèses : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
 
     // gestion des ?
     error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_JOKER);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des ? : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+    printf("après gestion des ? : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
 
     // gestion des *
     error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_ETOILE);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des * : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+    printf("après gestion des * : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
     
     // gestion des @
     error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_CONCATENATION);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des @ : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+    printf("après gestion des @ : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
 
     // gestion des |
     error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_UNION);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des | : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+    printf("après gestion des | : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
 
     Tree* t = NULL;
     for(size_t i=0;i<forest_size;i++)

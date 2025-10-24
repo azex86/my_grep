@@ -1,5 +1,5 @@
 CFLAGS= -Wall -Werror
-DEBUG_FLAGS= -g -fsanitize=address -O0
+DEBUG_FLAGS= -g -fsanitize=address -O0 -DDEBUG
 RELEASE_FLAGS= -Ofast
 
 

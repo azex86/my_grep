@@ -1,3 +1,9 @@
+/*
+    By Adrien Couvidat
+    compilation :
+    gcc -Wall -Werror -Ofast mygrep.c -o mygrep 
+*/
+
 #define _CRT_SECURE_NO_WARNINGS
 #ifdef _WIN32
 #include <Windows.h>
@@ -125,9 +131,6 @@ bool is_racine(Tree* tree)
 
 
 /// @brief retourne le premier Tree* non NULL dans `er` et le remplace par NULL
-/// @param er 
-/// @param er_size 
-/// @return 
 Tree* get_next_tree(Tree** er,size_t er_size)
 {
     for(size_t i=0;i<er_size;i++)
@@ -309,7 +312,7 @@ Tree** make_forest(Lettre* er,size_t* forest_size)
     {
         if(er[i]=='(')
         {
-            if(er[i-1]!='(' && !is_operator(er[i-1]))
+            if(er[i-1]!='(' && !is_operator_binaire(er[i-1]))
                 nb_concatenation_implicite++;
         }else if(!is_operator(er[i]) && er[i]!=')')
         {
@@ -328,7 +331,7 @@ Tree** make_forest(Lettre* er,size_t* forest_size)
     {
         if(er[i]=='(')
         {
-            if(er[i-1]!='(' && !is_operator(er[i-1]))
+            if(er[i-1]!='(' && !is_operator_binaire(er[i-1]))
             {
                 forest[i+current_nb_concatenation] = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,NULL,NULL);
                 current_nb_concatenation++;
@@ -374,78 +377,89 @@ int merge_parentheses(Tree** forest,size_t forest_size)
 
 Tree* merge_forest(Tree** forest,size_t forest_size)
 {
-    // printf("etat initial : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
-
+#ifdef DEBUG
+    printf("etat initial : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
+#endif
     // fusion par parenthèse
     int error = merge_parentheses(forest,forest_size);
     if(error==-1)
         return NULL;
 
-    // printf("après fusion des parenthèses : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+#ifdef DEBUG
+    printf("après fusion des parenthèses : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
+#endif
 
     // gestion des ?
     error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_JOKER);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des ? : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+#ifdef DEBUG
+    printf("après gestion des ? : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
+#endif
 
     // gestion des *
     error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_ETOILE);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des * : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
-    
+#ifdef DEBUG
+    printf("après gestion des * : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
+#endif   
+
     // gestion des @
     error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_CONCATENATION);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des @ : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+#ifdef DEBUG
+    printf("après gestion des @ : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
+#endif
 
     // gestion des |
     error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_UNION);
     if(error==-1)
         return NULL;
 
-    // printf("après gestion des | : [");
-    // for(size_t i=0;i<forest_size;i++)
-    // {
-    //     Tree_print(forest[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
+#ifdef DEBUG
+    printf("après gestion des | : [");
+    for(size_t i=0;i<forest_size;i++)
+    {
+        Tree_print(forest[i]);
+        printf(";");
+    }
+    printf("]\n");
+#endif
 
     Tree* t = NULL;
     for(size_t i=0;i<forest_size;i++)
@@ -470,13 +484,7 @@ Tree* merge_forest(Tree** forest,size_t forest_size)
 
 
 Tree* make_syntaxique_tree(Lettre* er)
-{
-    /*
-        idée : transformer le char* en une liste d'arbre
-                faire un premier passage pour les parenthèses qui fusionnera certains arbres
-            lancer l'analyse classique pour faire le reste
-    */
-    
+{    
     size_t er_size;
     Tree** trees = make_forest(er,&er_size);
 
@@ -1058,7 +1066,7 @@ Automate* make_thomson_automate(Tree* syntaxique_tree,size_t alphabet_size)
 
 
 /// @brief Implémentation des ensembles finies
-/// Interface : initialisation O(n); libération; ajout O(n);
+/// Interface : initialisation O(n); libération; ajout O(1);
 /// test d'appartenance O(1); fusion O(n)
 struct Ensemble
 {
@@ -1437,10 +1445,6 @@ ListArray* find_motif_end_indexs(Automate* line_automate,Lettre* line)
 
 /// @brief Retrouve les index de début des motifs reconnu par `a` dans `line`
 /// à partir des index de fin de ces même motifs, (obtenu précedemment avec `find_motif_end_indexs`)
-/// @param a 
-/// @param line 
-/// @param end_indexs 
-/// @return 
 ListArray* find_motif_start_indexs(Automate* reverse_automate,Lettre* line,ListArray* end_indexs)
 {
     ListArray* indexs = ListArray_init();
@@ -1589,7 +1593,6 @@ Lettre* translate(char* sentence,size_t alphabet_size)
 
 int main(int argc,char** argv)
 {
-    bool extended_expression = false;
     char* input_filename = NULL;
     char* regular_expression_char = NULL;
     FILE* source = NULL;
@@ -1601,10 +1604,7 @@ int main(int argc,char** argv)
     {
         char* arg = argv[i];
 
-        if(strcmp(arg,"-E")==0)
-        {
-            extended_expression = true;
-        }else if(strcmp(arg,"--alphabet")==0 || strcmp(arg,"-A")==0)
+        if(strcmp(arg,"--alphabet")==0 || strcmp(arg,"-A")==0)
         {
             alphabet_size = atoll(argv[++i]);
         }else if(strcmp(arg,"--verbose")==0)
@@ -1646,31 +1646,30 @@ int main(int argc,char** argv)
     
     Tree* t = NULL;
     Automate* a = NULL;
+    Automate* reverse_automate = NULL;
+    Automate* line_automate = NULL;
+
     
-    if(extended_expression)
+    t = make_syntaxique_tree(regular_expression);
+    if(t==NULL)
     {
-        t = make_syntaxique_tree(regular_expression);
-        if(verbose)
-        {
-            printf("arbre syntaxique : ");Tree_print(t); printf("\n");
-        }
-         
-        a = make_thomson_automate(t,alphabet_size);
-        if(verbose)
-        {
-            Automate_print(a);
-        }
-
-    }else
-    {
-        fprintf(stderr,"non implémenté\n");
-        return 1;
+        fprintf(stderr,"Impossible de comprendre l'expression !\n");
+        goto LIBERATION_ERROR;
     }
-
+    if(verbose)
+    {
+        printf("arbre syntaxique : ");Tree_print(t); printf("\n");
+    }
+        
+    a = make_thomson_automate(t,alphabet_size);
     if(a==NULL)
     {
         fprintf(stderr,"Impossible de construire l'automate associé à l'expression %s !\n",regular_expression_char);
-        return 1;
+        goto LIBERATION_ERROR;
+    }
+    if(verbose)
+    {
+        Automate_print(a);
     }
 
     if(input_filename==NULL)
@@ -1683,13 +1682,13 @@ int main(int argc,char** argv)
         if (source==NULL)
         {
             fprintf(stderr,"Impossible d'ouvrir le fichier %s!\n",input_filename);
-            return 1;
+            goto LIBERATION_ERROR;
         }
         
     }
 
-    Automate* reverse_automate = Automate_reverse(a);
-    Automate* line_automate = Automate_line(a);
+    reverse_automate = Automate_reverse(a);
+    line_automate = Automate_line(a);
 
     size_t line_count = 0;
     Lettre* line = NULL;
@@ -1719,6 +1718,21 @@ int main(int argc,char** argv)
     }
     
 
+
+    if(a!=NULL)
+    {
+        Automate_free(a);
+        if(reverse_automate!=NULL)
+        Automate_free(reverse_automate);
+        if(line_automate!=NULL)
+        Automate_free(line_automate);
+    }
+    if(t!=NULL)Tree_free(t);
+    if(regular_expression!=NULL)free(regular_expression);
+    Ensemble_free_pool();
+    return 0;
+
+LIBERATION_ERROR:
     if(a!=NULL)
     {
         Automate_free(a);
@@ -1728,35 +1742,7 @@ int main(int argc,char** argv)
     if(t!=NULL)Tree_free(t);
     if(regular_expression!=NULL)free(regular_expression);
     Ensemble_free_pool();
-    return 0;
+    return 1;
 }
 
 
-
-/*
-
-time ./mygrep  -E "(.*q.*w.*)|(.*w.*q.*)" Donnees_grep/francais.txt 
-clownesque
-clownesques
-squaw
-squaws
-wisigothique
-wisigothiques
-
-real    0m0.279s
-user    0m0.184s
-sys     0m0.023s
-
-
-time grep -E "(^.*q.*w.*$)|(^.*w.*q.*$)" Donnees_grep/francais.txt 
-clownesque
-clownesques
-squaw
-squaws
-wisigothique
-wisigothiques
-
-real    0m0.015s
-user    0m0.002s
-sys     0m0.002s
-*/

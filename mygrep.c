@@ -1,4 +1,8 @@
 #define _CRT_SECURE_NO_WARNINGS
+#ifdef _WIN32
+#include <Windows.h>
+#endif // _WIN32
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +28,26 @@ typedef size_t Lettre;
 
 Lettre OPERATORS[] = {SYNTAXE_OPERATOR_ETOILE,SYNTAXE_OPERATOR_CONCATENATION,SYNTAXE_OPERATOR_UNION};
 
+bool is_operator(Lettre l)
+{
+    return  l==SYNTAXE_OPERATOR_CONCATENATION ||
+            l==SYNTAXE_OPERATOR_ETOILE ||
+            l==SYNTAXE_OPERATOR_JOKER ||
+            l==SYNTAXE_OPERATOR_UNION;
+}
+
+bool is_operator_binaire(Lettre l)
+{
+    return  l==SYNTAXE_OPERATOR_CONCATENATION ||
+            l==SYNTAXE_OPERATOR_UNION;
+}
+
+bool is_operator_unaire(Lettre l)
+{
+    return  l==SYNTAXE_OPERATOR_ETOILE ||
+            l==SYNTAXE_OPERATOR_JOKER ;
+}
+
 struct Tree
 {
     Lettre etiquette;
@@ -36,8 +60,8 @@ struct Tree
 /// @brief Structure représentant un arbre syntaxique 
 /// l'étiquette est un opérateur autorisé ou une lettre
 /// `left_children` et `right_children` sont les enfants du noeud
-/// @note si et seulement si le noeud n'a pas d'enfant `left_children=NULL`
-/// @note si et seulement si le noeud n'a qu'un seul enfant `right_children=NULL`
+/// @note le noeud n'a pas d'enfant si et seulement si `left_children=NULL`
+/// @note le noeud n'a qu'un seul enfant si et seulement si  `right_children=NULL`
 typedef struct Tree Tree;
 
 Tree* Tree_init(Lettre etiquette,Tree* left,Tree* right)
@@ -99,189 +123,26 @@ bool is_racine(Tree* tree)
     return tree->left_chilfren==NULL && tree->right_children==NULL;
 }
 
-Tree* char_slice(Tree** er,size_t er_size)
+
+/// @brief retourne le premier Tree* non NULL dans `er` et le remplace par NULL
+/// @param er 
+/// @param er_size 
+/// @return 
+Tree* get_next_tree(Tree** er,size_t er_size)
 {
-    // on veut maintenant séparer er[0:er_size] en caractères
-    // avec une concaténation entre chaque
-    if(er_size>0)
+    for(size_t i=0;i<er_size;i++)
     {
-        
-        if(er[0]!=NULL)
+        if(er[i]!=NULL)
         {
-            Tree* next = char_slice(&er[1],er_size-1);
-            Tree* t = NULL;
-            if(next!=NULL)
-            {
-                // on concatène le caractère actuel avec next
-                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,er[0],NULL);
-                t->right_children = next;
-            }else
-            {
-                // on a trouvé le dernier caractère, on le renvoit
-                t = er[0];
-            }
-            
-            er[0] = NULL;
-            return t;
-        }
-        else
-        {
-            return char_slice(&er[1],er_size-1);
+            Tree* temp = er[i];
+            er[i] = NULL;
+            return temp;
         }
     }
-
     return NULL;
 }
 
-/// @brief construit l'arbre syntaxique d'une expression régulière en considérant 
-/// que l'opérateur fournit est celui avec la plus haute priorité et les blocks sont ensuite arbrifié caractère par caractère
-/// @param er un tableau d'arbre syntaxique, les cases utilisé sont mises à NULL
-/// @param er_size la taille de la chaine (utilse si on a veut rechercher dans une partie de la châine)
-/// @param  oprator priorité de l'opérateur cherché
-/// @return un arbre syntaxique
-/// @example operator_binaire_slice("a|a@a",5,2) -> un arbre dont l'affichage est : ((a)|(a))@(a)
-Tree* operator_unaire_slice(Tree** er,size_t er_size,int operator_priority)
-{
-    Lettre operator = OPERATORS[operator_priority];
-
-    // printf("Recherche de l'opérateur %c de priorité %d sur ",(char)operator,operator_priority);
-    // for(int i=0;i<er_size;i++)
-    //    if(er[i]!=NULL)
-    //    {
-    //         if(is_racine(er[i]))
-    //             printf("%c",(char)er[i]->etiquette);
-    //         else
-    //             printf("(%c)",(char)er[i]->etiquette);
-    //     }
-        
-    // printf("\n");
-
-    Tree* last_tree = NULL;
-    size_t last_tree_index = 0;
-
-    size_t index=0;
-    for(;index<er_size;index++)
-    {
-        if(er[index]==NULL)
-            continue;
-
-        if(er[index]->etiquette==operator && is_racine(er[index]))
-        {
-            // on a trouvé un opérateur
-            // on lui passe comme argument la dernière expression rencontrée : last_tree
-            // puis on concatène avec l'arbre de l'expression antérieur 
-            // puis on concatène avec l'arbre de la suite
-            
-            if(last_tree==NULL)
-            {
-                fprintf(stderr,"Impossible de raccrocher l'opérateur * à une expression !\n");
-                return NULL;
-            }
-
-            Tree* antecedent = char_slice(er,last_tree_index);
-            
-            Tree* next = operator_unaire_slice(&er[index+1],er_size-index-1,operator_priority);
-            
-            Tree* t;
-            t = er[index];
-            t->left_chilfren = last_tree; // gestion de l'arbre de l'opérateur
-
-            if(antecedent!=NULL)
-            {
-                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,antecedent,t); // concaténation avec l'antécédent
-            }
-
-            if(next!=NULL)
-            {
-                t = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,t,next); //concaténation avec le suivant
-            }
-
-            er[index] = NULL;
-            er[last_tree_index] = NULL;
-            return t;
-        }else
-        {
-            last_tree = er[index];
-            last_tree_index = index;
-        }
-    }
-
-    return  char_slice(er,er_size);
-}
-
-/// @brief construit l'arbre syntaxique d'une expression régulière en considérant 
-/// que l'opérateur fournit est celui avec la plus haute priorité et les blocks sont ensuite 
-/// appelé récursivement sur l'opérateur suivant donné par OPERATOR_PRIORITY
-/// @warning les arbres du tableau sont ajouté à l'arbre construit, ils ne doivent donc pas être libérés
-/// @param er le tableau d'arbre dans laquelle on doit procéder, les cases utilisées sont mises à NULL
-/// @param er_size la taille de la chaine (utilse si on a veut rechercher dans une partie de la châine)
-/// @param  operator_priority priorité de l'opérateur cherché, 2 pour lancer l'analyse depuis le début
-/// @return un arbre syntaxique
-/// @example operator_binaire_slice("a|a@a",5,2) -> un arbre dont l'affichage est : ((a)|(a))@(a)
-Tree* operator_binaire_slice(Tree** er,size_t er_size,int operator_priority)
-{
-    if(operator_priority==0)
-    {
-        return operator_unaire_slice(er,er_size,0);
-    }
-
-    Lettre operator = OPERATORS[operator_priority];
-
-    // printf("Recherche de l'opérateur %c de priorité %d sur ",(char)operator,operator_priority);
-    // for(int i=0;i<er_size;i++)
-    //     if(er[i]!=NULL)
-    //     {
-    //         if(is_racine(er[i]))
-    //             printf("%c",(char)er[i]->etiquette);
-    //         else
-    //             printf("(%c)",(char)er[i]->etiquette);
-    //     }
-
-
-    // printf("\n");
-
-    Tree* current_tree = NULL;
-    size_t last_index = 0;
-    for(size_t index=0;index<er_size;index++)
-    {
-        if(er[index]==NULL)continue;
-
-        if(er[index]->etiquette==operator && is_racine(er[index]))
-        {
-            if(current_tree==NULL)
-            {
-                // on arrive sur le premier operateur ce cette sorte
-                er[index]->left_chilfren = operator_binaire_slice(&er[last_index],index-last_index,operator_priority-1);
-                er[index]->right_children = NULL;
-                current_tree = er[index];
-                er[index] = NULL;
-            }else
-            {
-                current_tree->right_children = operator_binaire_slice(&er[last_index],index-last_index,operator_priority-1);
-                er[index]->left_chilfren = current_tree;
-                current_tree = er[index];
-                er[index] = NULL;
-            }
-            last_index = index+1;
-        }
-    }
-    if(current_tree!=NULL && current_tree->right_children==NULL)
-    {
-        current_tree->right_children = operator_binaire_slice(&er[last_index],er_size-last_index,operator_priority-1);
-    }
-    else if(current_tree==NULL)
-    {
-        // aucun operateur n'a été trouvé on passe tout sur l'opérateur suivant
-        return operator_binaire_slice(er,er_size,operator_priority-1);
-    }
-    return current_tree;
-}
-
-/// @brief fusionne les "a?" en (a)? 
-/// @param regular_trees 
-/// @param size 
-/// @return le nombre d'opérateur rencontrés, -1 en cas d'erreur 
-int operator_joker_merge(Tree** er,size_t er_size)
+int operator_unaire_merge(Tree** er,size_t er_size,Lettre operator)
 {
     int count = 0;
     Tree* last_tree = NULL;
@@ -292,17 +153,20 @@ int operator_joker_merge(Tree** er,size_t er_size)
         {
             continue;
         }
-        if(er[index]->etiquette == SYNTAXE_OPERATOR_JOKER)
+        if(er[index]->etiquette == operator)
         {
             if(last_tree==NULL)
             {
-                fprintf(stderr,"Impossible d'attacher un opérateur joker('?') à une lettre\n");
+                fprintf(stderr,"Mauvaise syntaxe dans l'utilisation de l'opérateur : %c\n",(char)operator);
                 return -1;
             }
 
             er[index]->left_chilfren = last_tree;
             er[last_tree_index] = NULL;
             count++;
+
+            last_tree_index = index;
+            last_tree = er[index];
         }else
         {
             last_tree = er[index];
@@ -313,6 +177,44 @@ int operator_joker_merge(Tree** er,size_t er_size)
     return count;
 }
 
+int operator_binaire_merge(Tree** er,size_t er_size,Lettre operator)
+{
+    int count = 0;
+    Tree* last_tree = NULL;
+    size_t last_tree_index = 0;
+    for(size_t index=0;index<er_size;index++)
+    {
+        if(er[index] == NULL)
+        {
+            continue;
+        }
+        if(er[index]->etiquette == operator)
+        {
+            Tree* next_tree = get_next_tree(&er[index+1],er_size-index-1);
+            if(last_tree==NULL || next_tree==NULL)
+            {
+                fprintf(stderr,"Mauvaise syntaxe dans l'utilisation de l'opérateur : %c\n",(char)operator);
+                return -1;
+            }
+
+            er[index]->left_chilfren = last_tree;
+            er[index]->right_children = next_tree;
+            er[last_tree_index] = NULL;
+            count++;
+
+            last_tree_index = index;
+            last_tree = er[index];
+        }else
+        {
+            last_tree = er[index];
+            last_tree_index = index;
+        }
+    }
+
+    return count;
+}
+
+Tree* merge_forest(Tree** forest,size_t forest_size);
 
 /// @brief fusionne les arbres entre la parenthèse ouvrante à l'index 0 et sa parenthèse fermante associée
 /// @param regular_trees un tableau d'arbre dont le premier est réduit à une racine dont l'étiquette est '('
@@ -346,11 +248,11 @@ size_t parentheses_merge(Tree** regular_trees,size_t size)
             Tree_free(regular_trees[index]);
 
             // reste à fusionner les arbres des index 1 à index-1 à l'aide de l'analyse des opérateur
-            Tree* t = operator_binaire_slice(&regular_trees[1],index-1,2);
+            Tree* t = merge_forest(&regular_trees[1],index-1);
             
             // on met à NULL les arbres utilisés
-            for(size_t j=0;j<=index;j++)
-                regular_trees[j] = NULL;
+            regular_trees[0]=NULL;
+            regular_trees[index]=NULL;
                 
             // on met l'abre issu de la fusion dans la première case de notre tableau
             regular_trees[0] = t;
@@ -393,6 +295,180 @@ size_t str_len(Lettre* str)
     return size;
 }
 
+Tree** make_forest(Lettre* er,size_t* forest_size)
+{
+    size_t er_size = str_len(er);
+
+    // on fait une concaténation implicite entre deux lettres ou entre un opérateur unaire et une lettre à sa droite (ex :  a?a ou a*b)
+    // cas des parenthèses : '(' peut-être implicitement concatener à gauche et ')' peut l'être à droite
+    // si on a )( on doit faire la concaténation
+    size_t nb_concatenation_implicite = 0;
+    
+
+    for(size_t i=1;i<er_size;i++)
+    {
+        if(er[i]=='(')
+        {
+            if(er[i-1]!='(' && !is_operator(er[i-1]))
+                nb_concatenation_implicite++;
+        }else if(!is_operator(er[i]) && er[i]!=')')
+        {
+            if(er[i-1]!='(' && (is_operator_unaire(er[i-1]) || !is_operator(er[i-1])))
+                nb_concatenation_implicite++;
+        }
+    }
+
+    *forest_size = er_size+nb_concatenation_implicite;
+
+    Tree** forest = malloc(sizeof(Tree*)*(*forest_size));
+
+    
+    size_t current_nb_concatenation = 0;
+    for(size_t i=1;i<er_size;i++)
+    {
+        if(er[i]=='(')
+        {
+            if(er[i-1]!='(' && !is_operator(er[i-1]))
+            {
+                forest[i+current_nb_concatenation] = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,NULL,NULL);
+                current_nb_concatenation++;
+            }
+        }else if(!is_operator(er[i]) && er[i]!=')')
+        {
+            if(er[i-1]!='(' && (is_operator_unaire(er[i-1]) || !is_operator(er[i-1])))
+            {
+                forest[i+current_nb_concatenation] = Tree_init(SYNTAXE_OPERATOR_CONCATENATION,NULL,NULL);
+                current_nb_concatenation++;
+            }
+        }
+
+        forest[i+current_nb_concatenation] = Tree_init(er[i],NULL,NULL);
+    }
+    if(er_size>0)
+    forest[0] = Tree_init(er[0],NULL,NULL);
+
+    return forest;
+}
+
+int merge_parentheses(Tree** forest,size_t forest_size)
+{
+    int count = 0;
+    for(size_t i=0;i<forest_size;i++)
+    {
+       if(forest[i]!=NULL)
+        {
+            if(forest[i]->etiquette=='(')
+            {
+                if(parentheses_merge(&forest[i],forest_size-i)==0)
+                {
+                    return -1;
+                }else
+                {
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
+}
+
+Tree* merge_forest(Tree** forest,size_t forest_size)
+{
+    // printf("etat initial : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
+
+    // fusion par parenthèse
+    int error = merge_parentheses(forest,forest_size);
+    if(error==-1)
+        return NULL;
+
+    // printf("après fusion des parenthèses : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
+
+    // gestion des ?
+    error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_JOKER);
+    if(error==-1)
+        return NULL;
+
+    // printf("après gestion des ? : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
+
+    // gestion des *
+    error = operator_unaire_merge(forest,forest_size,SYNTAXE_OPERATOR_ETOILE);
+    if(error==-1)
+        return NULL;
+
+    // printf("après gestion des * : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
+    
+    // gestion des @
+    error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_CONCATENATION);
+    if(error==-1)
+        return NULL;
+
+    // printf("après gestion des @ : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
+
+    // gestion des |
+    error = operator_binaire_merge(forest,forest_size,SYNTAXE_OPERATOR_UNION);
+    if(error==-1)
+        return NULL;
+
+    // printf("après gestion des | : [");
+    // for(size_t i=0;i<forest_size;i++)
+    // {
+    //     Tree_print(forest[i]);
+    //     printf(";");
+    // }
+    // printf("]\n");
+
+    Tree* t = NULL;
+    for(size_t i=0;i<forest_size;i++)
+    {
+        if(forest[i]!=NULL)
+        {
+            if(t==NULL)
+            {
+                t=forest[i];
+                forest[i]=NULL;
+            }
+            else
+            {
+                fprintf(stderr,"Erreur lors de la lecture de l'expression régulière !\n");
+                return NULL;
+            }
+        }
+    }
+    
+    return t;
+}
+
+
 Tree* make_syntaxique_tree(Lettre* er)
 {
     /*
@@ -400,44 +476,13 @@ Tree* make_syntaxique_tree(Lettre* er)
                 faire un premier passage pour les parenthèses qui fusionnera certains arbres
             lancer l'analyse classique pour faire le reste
     */
-    size_t er_size = str_len(er);
-    Tree** trees = malloc(sizeof(Tree*)*er_size);
+    
+    size_t er_size;
+    Tree** trees = make_forest(er,&er_size);
 
-    // transformation de ma chaîne de caractère en arbres 
-    for(size_t i=0;i<er_size;i++)
-    {
-        trees[i] = Tree_init(er[i],NULL,NULL);
-    }
-
-    // gestion des ?
-    int error = operator_joker_merge(trees,er_size);
-    if(error==-1)
-        return NULL;
-
-    // fusion par parenthèse
-    for(size_t i=0;i<er_size;i++)
-    {
-       if(trees[i]!=NULL)
-            if(trees[i]->etiquette=='(')
-                if(parentheses_merge(&trees[i],er_size-i)==0)
-                {
-                    return NULL;
-                }
-    }
-
-    // printf("Après fusion des parenthèses : [");
-    // for(size_t i=0;i<er_size;i++)
-    // {
-    //     Tree_print(trees[i]);
-    //     printf(";");
-    // }
-    // printf("]\n");
-
-    // application des fusions des opérateurs
-    Tree* t = operator_binaire_slice(trees,er_size,2);
-
+    Tree* syntaxique_tree = merge_forest(trees,er_size);
     free(trees);
-    return t;
+    return syntaxique_tree;
 }
 
 
@@ -446,7 +491,7 @@ Tree* make_syntaxique_tree(Lettre* er)
     Algorithme de Thomson
 
         le a? est équivalent à a|epsilon : automate équivalent ->()-epsilon,a->()->
-        le . est équivalent à SIGMA : automate équivalent ->(())<-a,b,....>
+        le . est équivalent à SIGMA : automate équivalent ->()-a,b,....->()->
 */
 
 #define MIN_LISTARRAY_CAPACITY 1000
@@ -1311,12 +1356,6 @@ ListArray* find_motif_end_indexs(Automate* line_automate,Lettre* line)
         Ensemble_free(Q);
         Q = next_Q;
     }
-    
-    if(Automate_is_final_ensemble(line_automate,Q))
-    {
-        // la dernière séquence est reconnu
-        ListArray_push(indexs,current_index);
-    }
 
     Ensemble_free(Q);
     Ensemble_free(Q_init);
@@ -1350,7 +1389,7 @@ ListArray* find_motif_start_indexs(Automate* reverse_automate,Lettre* line,ListA
             Q = next_Q;
             current_index--;
         }
-        ListArray_push(indexs,current_index+1);
+        ListArray_push(indexs,current_index+(current_index<end)?1:0);
         Ensemble_free(Q);
     }
     return indexs;
@@ -1394,6 +1433,7 @@ enum COLOR
 
 void set_stdout_color(enum COLOR color)
 {
+#ifdef __linux
     switch (color)
     {
     case WHITE:
@@ -1405,6 +1445,36 @@ void set_stdout_color(enum COLOR color)
     default:
         break;
     }
+#endif
+
+
+#ifdef _WIN32
+    HANDLE  hConsole;
+    int k;
+
+    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
+
+    switch (color)
+    {
+    case WHITE:
+        SetConsoleTextAttribute(hConsole, 15);
+        break;
+    case RED:
+        SetConsoleTextAttribute(hConsole, 12);
+        break;
+    default:
+        break;
+    }
+
+    //// you can loop k higher to see more color choices
+    //for (k = 1; k < 255; k++)
+    //{
+    //    SetConsoleTextAttribute(hConsole, k);
+    //    printf("%3d  %s\n", k, "I want to be nice today!");     
+    //}
+#endif 
+
 }
 
 void afficher_motifs(Lettre* line,ListArray* starts,ListArray* ends)
@@ -1414,12 +1484,14 @@ void afficher_motifs(Lettre* line,ListArray* starts,ListArray* ends)
     {
         size_t start = starts->data[i];
         size_t end = ends->data[i];
-
+    
         while (current_index<start)
         {
             putc(line[current_index++],stdout);
         }
         
+        if(start==end)//motif vide
+            continue;
         set_stdout_color(RED);
         while (current_index<=end)
         {
@@ -1553,7 +1625,7 @@ int main(int argc,char** argv)
     Lettre* line = NULL;
     while ((line=get_line(source))!=NULL)
     {
-        if(verbose)
+        if(verbose && source!=stdin)
         {
             printf("line %ld\r",line_count);
         }
@@ -1565,6 +1637,8 @@ int main(int argc,char** argv)
         {
             if(show_line)
                 printf("%ld : ",line_count);
+            if(verbose)
+                printf(" %ld motifs : ",ends->size);
             afficher_motifs(line,starts,ends);
         }
 

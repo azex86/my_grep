@@ -4,9 +4,9 @@
     gcc -Wall -Werror -Ofast mygrep.c -o mygrep 
 */
 
-#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS // pour éviter des alerte de compilation avec msvc sous Windows
 #ifdef _WIN32
-#include <Windows.h>
+#include <Windows.h> // pour le changement de couleur du terminal sous Windows
 #endif // _WIN32
 
 
@@ -26,11 +26,11 @@ typedef size_t Lettre;
     Creation d'un arbre syntaxique depuis une expression rationnelle sous forme de chaîne de caractère
 */
 
-#define SYNTAXE_OPERATOR_CONCATENATION '@' // priorité 1
+#define SYNTAXE_OPERATOR_CONCATENATION '@' // priorité 2
 #define SYNTAXE_OPERATOR_ETOILE '*' // priorité 1
 #define SYNTAXE_OPERATOR_UNION '|'  // priorité 3
 #define SYNTAXE_OPERATOR_SIGMA '.'
-#define SYNTAXE_OPERATOR_JOKER '?' 
+#define SYNTAXE_OPERATOR_JOKER '?' // priorité 0
 
 Lettre OPERATORS[] = {SYNTAXE_OPERATOR_ETOILE,SYNTAXE_OPERATOR_CONCATENATION,SYNTAXE_OPERATOR_UNION};
 
@@ -1049,7 +1049,9 @@ Automate* make_thomson_automate(Tree* syntaxique_tree,size_t alphabet_size)
             break;
         case SYNTAXE_OPERATOR_JOKER:
             a = make_thomson_automate(syntaxique_tree->left_chilfren,alphabet_size);
-            return Automate_joker(a);
+            b = Automate_joker(a);
+            Automate_free(a);
+            return b;
             break;
         case SYNTAXE_OPERATOR_SIGMA:
             return Automate_sigma(alphabet_size);
@@ -1385,11 +1387,13 @@ Automate* Automate_reverse(Automate* a)
 
 Automate* Automate_line(Automate* a)
 {
-    // on construit l'automate reconnaissant ".e" avec e l'expression régulière dont le langage est dénoté par a
+    // on construit l'automate reconnaissant ".*e" avec e l'expression régulière dont le langage est dénoté par a
     // c'est à dire "(.)*e" 
     Automate* b = Automate_sigma(a->alphabet_size);
-    Automate* temp = Automate_concatenation(b,a);
+    Automate* c = Automate_etoile(b);
+    Automate* temp = Automate_concatenation(c,a);
     Automate_free(b);
+    Automate_free(c);
     return temp;
 }
 
@@ -1581,14 +1585,22 @@ void afficher_motifs(Lettre* line,ListArray* starts,ListArray* ends)
     putc('\n',stdout);
 }
 
-Lettre* translate(char* sentence,size_t alphabet_size)
+Lettre* char_to_Lettre(char* sentence,size_t alphabet_size)
 {
     size_t size = strlen(sentence);
     Lettre* line = malloc(sizeof(Lettre)*(size+1));
-    for(size_t i=0;i<size;i++)
+    for(size_t i=0;i<size+1;i++)
         line[i] = sentence[i];
-    line[size] = 0;
     return line;
+}
+
+char* Lettre_to_char(Lettre* line)
+{
+    size_t size = str_len(line);
+    char* new_line = malloc(sizeof(char)*(size+1));
+        for(size_t i=0;i<size+1;i++)
+            new_line[i] = line[i];
+    return new_line;
 }
 
 int main(int argc,char** argv)
@@ -1599,6 +1611,7 @@ int main(int argc,char** argv)
     size_t alphabet_size = 255;
     bool verbose = false;
     bool show_line = false;
+    bool line_match= false;
 
     for(size_t i=1;i<argc;i++)
     {
@@ -1610,9 +1623,12 @@ int main(int argc,char** argv)
         }else if(strcmp(arg,"--verbose")==0)
         {
             verbose= true;
-        }else if(strcmp(arg,"--line")==0)
+        }else if(strcmp(arg,"--lines")==0)
         {
             show_line = true;
+        }else if(strcmp(arg,"--line-match")==0)
+        {
+            line_match=true;
         }
         else
         {
@@ -1630,11 +1646,11 @@ int main(int argc,char** argv)
     }
 
 
-    Lettre* regular_expression = translate(regular_expression_char,alphabet_size);
+    Lettre* regular_expression = char_to_Lettre(regular_expression_char,alphabet_size);
 
     if(verbose)
     {
-        fprintf(stderr,"Recherche du motif \'%s\' dans ",regular_expression_char);
+        fprintf(stderr,"Recherche %s \'%s\' dans ",(line_match)?"de la phrase":"du motif",regular_expression_char);
         if(input_filename!=NULL)
         {
             fprintf(stderr,"le fichier %s \n",input_filename);
@@ -1690,6 +1706,7 @@ int main(int argc,char** argv)
     reverse_automate = Automate_reverse(a);
     line_automate = Automate_line(a);
 
+    size_t motifs_count = 0;
     size_t line_count = 0;
     Lettre* line = NULL;
     while ((line=get_line(source))!=NULL)
@@ -1699,20 +1716,38 @@ int main(int argc,char** argv)
             printf("line %ld\r",line_count);
         }
         //printf("lecture de \"%s\"\n",line);
-        ListArray* ends = find_motif_end_indexs(line_automate,line);
-        ListArray* starts = find_motif_start_indexs(reverse_automate,line,ends);
 
-        if(starts->size>0)
+        if (!line_match)
         {
-            if(show_line)
-                printf("%ld : ",line_count);
-            if(verbose)
-                printf(" %ld motifs : ",ends->size);
-            afficher_motifs(line,starts,ends);
+            ListArray* ends = find_motif_end_indexs(line_automate,line);
+            ListArray* starts = find_motif_start_indexs(reverse_automate,line,ends);
+
+            if(starts->size>0)
+            {
+                if(show_line)
+                    printf("%ld : ",line_count);
+                if(verbose)
+                    printf(" %ld motifs : ",ends->size);
+                afficher_motifs(line,starts,ends);
+                motifs_count+= starts->size;
+            }
+
+            ListArray_free(starts);
+            ListArray_free(ends);
+        }else
+        {
+            bool found = Automate_read_word(a,line);
+            if(found)
+            {
+                motifs_count++;
+                if(show_line)
+                    printf("%ld : ",line_count);
+                char* temp_line = Lettre_to_char(line);
+                printf("%s\n",temp_line);
+                free(temp_line);
+            }
         }
 
-        ListArray_free(starts);
-        ListArray_free(ends);
         free(line);
         line_count++;
     }
@@ -1736,7 +1771,9 @@ LIBERATION_ERROR:
     if(a!=NULL)
     {
         Automate_free(a);
+        if(reverse_automate!=NULL)
         Automate_free(reverse_automate);
+        if(line_automate!=NULL)
         Automate_free(line_automate);
     }
     if(t!=NULL)Tree_free(t);

@@ -20,3 +20,7 @@ release : build
 
 test : debug
 	./mygrep -E "(a|b)*ab(a|b)*"
+
+lea : CFLAGS+=$(DEBUG_FLAGS)
+lea : mygrep_lea.c
+	gcc $(CFLAGS) mygrep_lea.c -o mygrep_lea
